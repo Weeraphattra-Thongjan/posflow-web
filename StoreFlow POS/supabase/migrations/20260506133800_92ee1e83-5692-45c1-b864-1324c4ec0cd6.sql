@@ -1,0 +1,1 @@
+DROP TRIGGER IF EXISTS on_store_created ON public.stores;
