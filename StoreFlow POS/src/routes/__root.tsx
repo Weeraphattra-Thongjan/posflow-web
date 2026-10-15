@@ -69,9 +69,9 @@ function RootShell({ children }: { children: React.ReactNode }) {
         <I18nProvider>
           <AuthProvider>
             {children}
-            <Toaster richColors position="top-right" />
           </AuthProvider>
         </I18nProvider>
+        <Toaster richColors position="top-right" />
         <Scripts />
       </body>
     </html>

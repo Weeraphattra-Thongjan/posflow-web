@@ -16,7 +16,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. ดึง subscription ออกมาจาก data โดยตรง
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, s) => {
@@ -24,7 +23,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    // 2. ดึง Session ครั้งแรกอย่างปลอดภัย
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
         setSession(data.session);
@@ -32,13 +30,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    // 3. Unsubscribe เสมอเมื่อ unmount
     return () => {
       subscription.unsubscribe();
     };
   }, []);
 
-  // ✅ ล็อค Reference ของ signOut ไม่ให้สร้างใหม่ทุกรอบ
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setSession(null);
@@ -46,7 +42,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const user = session?.user ?? null;
 
-  // ✅ ล็อค Value Object ด้วย useMemo เพื่อหยุด Re-render Loop ทั่วทั้งแอป
   const value = useMemo(
     () => ({ session, user, loading, signOut }),
     [session, user, loading, signOut]

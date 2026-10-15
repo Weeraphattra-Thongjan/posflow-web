@@ -273,7 +273,6 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") localStorage.setItem("lang", l);
   }, []);
 
-  // ✅ ล็อค Reference ของฟังก์ชัน t ให้คงที่ ไม่สร้างใหม่ทุกครั้งที่ Re-render
   const t = useCallback(
     (key: string, vars?: Record<string, string | number>) => {
       let s = dict[key]?.[lang] ?? key;
@@ -287,7 +286,6 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     [lang]
   );
 
-  // ✅ ล็อค Value Object ของ Context ไม่ให้สร้างใหม่
   const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
