@@ -13,7 +13,10 @@ import { Store, Loader2 } from "lucide-react";
 export const Route = createFileRoute("/signup")({
   component: SignUpPage,
   head: () => ({
-    meta: [{ title: "สมัครใช้งาน | PosFlow" }, { name: "description", content: "สร้างบัญชีใหม่เพื่อเริ่มใช้งาน PosFlow" }],
+    meta: [
+      { title: "สมัครใช้งาน | PosFlow" },
+      { name: "description", content: "สร้างบัญชีใหม่เพื่อเริ่มใช้งาน PosFlow" },
+    ],
   }),
 });
 
@@ -27,11 +30,13 @@ function SignUpPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ fullName: "", email: "", password: "" });
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const parsed = schema.safeParse(form);
+    const parsed = schema.safeParse({ fullName, email, password });
     if (!parsed.success) {
       toast.error(parsed.error.issues[0].message);
       return;
@@ -48,7 +53,11 @@ function SignUpPage() {
     setLoading(false);
     if (error) {
       const msg = error.message.toLowerCase();
-      if (msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
+      if (
+        msg.includes("already") ||
+        msg.includes("registered") ||
+        msg.includes("exists")
+      ) {
         toast.error("อีเมลนี้ถูกใช้งานแล้ว กรุณาเข้าสู่ระบบ");
         navigate({ to: "/signin" });
         return;
@@ -79,8 +88,8 @@ function SignUpPage() {
                 <Label htmlFor="fullName">{t("auth.fullname")}</Label>
                 <Input
                   id="fullName"
-                  value={form.fullName}
-                  onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
                   required
                 />
               </div>
@@ -89,8 +98,8 @@ function SignUpPage() {
                 <Input
                   id="email"
                   type="email"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
                 />
               </div>
@@ -99,8 +108,8 @@ function SignUpPage() {
                 <Input
                   id="password"
                   type="password"
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   required
                 />
               </div>

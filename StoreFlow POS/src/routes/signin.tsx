@@ -13,7 +13,10 @@ import { Store, Loader2, Check, Eye, EyeOff } from "lucide-react";
 export const Route = createFileRoute("/signin")({
   component: SignInPage,
   head: () => ({
-    meta: [{ title: "เข้าสู่ระบบ | PosFlow" }, { name: "description", content: "เข้าสู่ระบบเพื่อจัดการร้านของคุณ" }],
+    meta: [
+      { title: "เข้าสู่ระบบ | PosFlow" },
+      { name: "description", content: "เข้าสู่ระบบเพื่อจัดการร้านของคุณ" },
+    ],
   }),
 });
 
@@ -26,14 +29,16 @@ function SignInPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
-  const passwordValid = form.password.length > 0;
+
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const passwordValid = password.length > 0;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const parsed = schema.safeParse(form);
+    const parsed = schema.safeParse({ email, password });
     if (!parsed.success) {
       toast.error(parsed.error.issues[0].message);
       return;
@@ -86,8 +91,8 @@ function SignInPage() {
                   <Input
                     id="email"
                     type="email"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     required
                     className="pr-9"
                   />
@@ -107,8 +112,8 @@ function SignInPage() {
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     required
                     className="pr-16"
                   />
