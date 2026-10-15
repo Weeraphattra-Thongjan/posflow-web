@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
 
 export type Lang = "th" | "en";
 
@@ -268,18 +268,29 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     if (saved === "th" || saved === "en") setLangState(saved);
   }, []);
 
-  const setLang = (l: Lang) => {
+  const setLang = useCallback((l: Lang) => {
     setLangState(l);
     if (typeof window !== "undefined") localStorage.setItem("lang", l);
-  };
+  }, []);
 
-  const t = (key: string, vars?: Record<string, string | number>) => {
-    let s = dict[key]?.[lang] ?? key;
-    if (vars) for (const [k, v] of Object.entries(vars)) s = s.replace(`{${k}}`, String(v));
-    return s;
-  };
+  // ✅ ล็อค Reference ของฟังก์ชัน t ให้คงที่ ไม่สร้างใหม่ทุกครั้งที่ Re-render
+  const t = useCallback(
+    (key: string, vars?: Record<string, string | number>) => {
+      let s = dict[key]?.[lang] ?? key;
+      if (vars) {
+        for (const [k, v] of Object.entries(vars)) {
+          s = s.replace(`{${k}}`, String(v));
+        }
+      }
+      return s;
+    },
+    [lang]
+  );
 
-  return <Ctx.Provider value={{ lang, setLang, t }}>{children}</Ctx.Provider>;
+  // ✅ ล็อค Value Object ของ Context ไม่ให้สร้างใหม่
+  const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useI18n() {
