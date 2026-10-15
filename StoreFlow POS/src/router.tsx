@@ -54,14 +54,20 @@ function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => vo
   );
 }
 
-export const getRouter = () => {
-  const router = createRouter({
-    routeTree,
-    context: {},
-    scrollRestoration: true,
-    defaultPreloadStaleTime: 0,
-    defaultErrorComponent: DefaultErrorComponent,
-  });
+// ✅ Singleton Instance ของ Router
+let routerInstance: ReturnType<typeof createRouter> | null = null;
 
-  return router;
+export const getRouter = () => {
+  if (!routerInstance) {
+    routerInstance = createRouter({
+      routeTree,
+      context: {},
+      scrollRestoration: true,
+      defaultPreload: false, // 👈 ปิด auto-preload ที่ยิงซ้ำตอนเมาส์โฟกัส
+      defaultPreloadStaleTime: 10000, // 👈 ตั้งค่าเป็น 10 วินาที ป้องกัน Preload วนลูป
+      defaultErrorComponent: DefaultErrorComponent,
+    });
+  }
+
+  return routerInstance;
 };
