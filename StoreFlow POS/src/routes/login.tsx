@@ -20,9 +20,9 @@ export const Route = createFileRoute("/login")({
   }),
 });
 
-function AdminLoginPage() {
-  const navigate = useNavigate();
-  const { t } = useI18n();
+//function AdminLoginPage() {
+  //const navigate = useNavigate();
+  //const { t } = useI18n();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -75,16 +75,15 @@ function AdminLoginPage() {
 
   return (
     <div className="min-h-screen bg-gradient-hero">
-      <Header />
+      {/* <Header /> */}
       <div className="container mx-auto flex items-center justify-center px-4 py-16">
         <div className="w-full max-w-md">
           <div className="mb-6 text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-primary shadow-glow">
               <ShieldCheck className="h-6 w-6 text-primary-foreground" />
             </div>
-            <h1 className="font-display text-2xl font-bold">{t("auth.admin.title")}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{t("auth.admin.subtitle")}</p>
-          </div>
+            <h1 className="font-display text-2xl font-bold">เข้าสู่ระบบผู้ดูแลระบบ</h1>
+            <p className="mt-1 text-sm text-muted-foreground">เฉพาะผู้ที่ได้รับอนุญาตจากผู้สร้างระบบเท่านั้น</p>          </div>
 
           <div className="rounded-2xl border border-border bg-card p-6 shadow-elegant">
             <form onSubmit={handleSubmit} className="space-y-4">
