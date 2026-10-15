@@ -24,39 +24,50 @@ function AdminLoginPage() {
   const navigate = useNavigate();
   const { t } = useI18n();
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ email: "", password: "" });
-
-  const schema = z.object({
-    email: z.string().trim().email(t("auth.email_invalid")),
-    password: z.string().min(1, t("auth.password_required")),
-  });
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const parsed = schema.safeParse(form);
+
+    // สร้าง Schema validation ตอนกด Submit เท่านั้น เพื่อไม่ให้สร้างวัตถุใหม่ตอนพิมพ์
+    const schema = z.object({
+      email: z.string().trim().email(t("auth.email_invalid")),
+      password: z.string().min(1, t("auth.password_required")),
+    });
+
+    const parsed = schema.safeParse({ email, password });
     if (!parsed.success) {
       toast.error(parsed.error.issues[0].message);
       return;
     }
+
     setLoading(true);
-    const { data: signInData, error } = await supabase.auth.signInWithPassword(parsed.data);
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
     if (error) {
       setLoading(false);
       toast.error(error.message);
       return;
     }
+
     const userId = signInData.user?.id;
     const { data: admin } = await supabase
       .from("app_admins")
       .select("user_id")
       .eq("user_id", userId!)
       .maybeSingle();
+
     if (!admin) {
       await supabase.auth.signOut();
       setLoading(false);
       toast.error(t("auth.admin.no_rights"));
       return;
     }
+
     setLoading(false);
     toast.success(t("auth.admin.success"));
     navigate({ to: "/admin" });
@@ -79,13 +90,29 @@ function AdminLoginPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="email">{t("auth.email")}</Label>
-                <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="password">{t("auth.password")}</Label>
-                <Input id="password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
               </div>
-              <Button type="submit" disabled={loading} className="w-full bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90">
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90"
+              >
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {t("auth.admin.btn")}
               </Button>
@@ -99,7 +126,8 @@ function AdminLoginPage() {
                 </Link>
               </p>
               <p className="text-xs">
-                {t("auth.admin.request")} <span className="font-medium">66160121@go.buu.ac.th</span>
+                {t("auth.admin.request")}{" "}
+                <span className="font-medium">66160121@go.buu.ac.th</span>
               </p>
             </div>
           </div>
