@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -38,16 +38,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signOut = async () => {
+  // ✅ ล็อค Reference ของ signOut ไม่ให้สร้างใหม่ทุกรอบ
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setSession(null);
-  };
+  }, []);
 
-  return (
-    <Ctx.Provider value={{ session, user: session?.user ?? null, loading, signOut }}>
-      {children}
-    </Ctx.Provider>
+  const user = session?.user ?? null;
+
+  // ✅ ล็อค Value Object ด้วย useMemo เพื่อหยุด Re-render Loop ทั่วทั้งแอป
+  const value = useMemo(
+    () => ({ session, user, loading, signOut }),
+    [session, user, loading, signOut]
   );
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useAuth() {
