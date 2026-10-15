@@ -16,19 +16,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+    // 1. ดึง subscription ออกมาจาก data โดยตรง
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
       setLoading(false);
     });
+
+    // 2. ดึง Session ครั้งแรกอย่างปลอดภัย
     supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+      if (data.session) {
+        setSession(data.session);
+      }
       setLoading(false);
     });
-    return () => sub.subscription.unsubscribe();
+
+    // 3. Unsubscribe เสมอเมื่อ unmount
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    setSession(null);
   };
 
   return (
