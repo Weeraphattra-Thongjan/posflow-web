@@ -1,5 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 
@@ -21,48 +20,52 @@ const Ctx = createContext<StoreCtx | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useAuth();
-  const navigate = useNavigate();
   const [store, setStore] = useState<Store | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
-    if (!user) return;
-    const { data: admin } = await supabase
-      .from("app_admins")
-      .select("user_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    const { data } = await supabase
-      .from("stores")
-      .select("id, name, slug, status, owner_id")
-      .eq("owner_id", user.id)
-      .limit(1)
-      .maybeSingle();
-    if (!data) {
-      if (admin) {
-        // Admin ไม่ต้องมีร้านค้า — ใส่ placeholder เพื่อให้ผ่าน guard
-        setStore({ id: "__admin__", name: "Admin", slug: "admin", status: "active", owner_id: user.id });
-        setLoading(false);
-        return;
-      }
-      navigate({ to: "/onboarding" });
+  const load = useCallback(async () => {
+    if (!user) {
+      setStore(null);
+      setLoading(false);
       return;
     }
-    setStore(data);
-    setLoading(false);
-  };
+
+    setLoading(true);
+    try {
+      const [{ data: admin }, { data: storeData }] = await Promise.all([
+        supabase.from("app_admins").select("user_id").eq("user_id", user.id).maybeSingle(),
+        supabase.from("stores").select("id, name, slug, status, owner_id").eq("owner_id", user.id).limit(1).maybeSingle(),
+      ]);
+
+      if (!storeData && admin) {
+        setStore({ id: "__admin__", name: "Admin", slug: "admin", status: "active", owner_id: user.id });
+      } else {
+        setStore(storeData ?? null);
+      }
+    } catch (err) {
+      console.error("Failed to load store:", err);
+      setStore(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) {
-      navigate({ to: "/signin" });
-      return;
+    if (user) {
+      load();
+    } else {
+      setStore(null);
+      setLoading(false);
     }
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, authLoading]);
+  }, [user, authLoading, load]);
 
-  return <Ctx.Provider value={{ store, loading: loading || authLoading, refresh: load }}>{children}</Ctx.Provider>;
+  const value = useMemo(
+    () => ({ store, loading: loading || authLoading, refresh: load }),
+    [store, loading, authLoading, load]
+  );
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useStore() {
