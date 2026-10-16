@@ -39,7 +39,6 @@ function slugify(s: string) {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 50);
-  // ถ้าชื่อเป็นภาษาไทยล้วน slugify จะได้สตริงว่าง → สร้าง slug สุ่มให้
   if (cleaned.length >= 3) return cleaned;
   return "store-" + Math.random().toString(36).slice(2, 8);
 }
@@ -53,25 +52,40 @@ function OnboardingPage() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [checkingStore, setCheckingStore] = useState(true);
   const [form, setForm] = useState({ name: "", slug: "", description: "" });
   const [autoSlug, setAutoSlug] = useState(true);
 
+  // 1. Guard เช็กการล็อกอิน
   useEffect(() => {
-    if (!authLoading && !user) navigate({ to: "/signin" });
+    if (!authLoading && !user) {
+      navigate({ to: "/signin" });
+    }
   }, [authLoading, user, navigate]);
 
-  // check existing store
+  // 2. เช็กว่าผู้ใช้มีร้านหรือยัง (รันเพียงครั้งเดียวต่อ user.id)
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) return;
+    let isMounted = true;
+
     supabase
       .from("stores")
       .select("id")
       .eq("owner_id", user.id)
       .limit(1)
       .then(({ data }) => {
-        if (data && data.length > 0) navigate({ to: "/dashboard" });
+        if (!isMounted) return;
+        if (data && data.length > 0) {
+          navigate({ to: "/dashboard" });
+        } else {
+          setCheckingStore(false);
+        }
       });
-  }, [user, navigate]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, navigate]);
 
   const handleNameChange = (val: string) => {
     setForm((f) => ({ ...f, name: val, slug: autoSlug ? slugify(val) : f.slug }));
@@ -102,7 +116,7 @@ function OnboardingPage() {
     navigate({ to: "/dashboard" });
   };
 
-  if (authLoading || !user) {
+  if (authLoading || checkingStore || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />

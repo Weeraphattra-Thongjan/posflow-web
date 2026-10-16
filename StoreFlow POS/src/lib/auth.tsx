@@ -16,17 +16,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // ใช้ onAuthStateChange เพียงทางเดียว ซึ่งจะ trigger INITIAL_SESSION ออกมาตั้งแต่นาทีแรกอยู่แล้ว
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
-      setLoading(false);
-    });
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        setSession(data.session);
-      }
       setLoading(false);
     });
 
