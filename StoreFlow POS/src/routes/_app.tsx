@@ -32,7 +32,10 @@ function AppLayout() {
       if (!active) return;
       setCheckingSession(false);
       if (error || !data.user) {
-        navigate({ to: location.pathname.startsWith("/admin") ? "/login" : "/signin" });
+        navigate({ 
+          to: location.pathname.startsWith("/admin") ? "/login" : "/signin",
+          replace: true 
+        });
       }
     });
 
@@ -61,10 +64,18 @@ function AppLayout() {
 function Shell() {
   const { store, loading } = useStore();
   const { lang, setLang } = useI18n();
+  const navigate = useNavigate();
+
+  // ป้องกันการค้างที่ Loading Spinner ถ้าดึงร้านค้าไม่พบ ให้ส่งไป /onboarding ทันที
+  useEffect(() => {
+    if (!loading && !store) {
+      navigate({ to: "/onboarding", replace: true });
+    }
+  }, [loading, store, navigate]);
 
   if (loading || !store) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
