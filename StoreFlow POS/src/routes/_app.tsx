@@ -66,7 +66,6 @@ function Shell() {
   const { lang, setLang } = useI18n();
   const navigate = useNavigate();
 
-  // ป้องกันการค้างที่ Loading Spinner ถ้าดึงร้านค้าไม่พบ ให้ส่งไป /onboarding ทันที
   useEffect(() => {
     if (!loading && !store) {
       navigate({ to: "/onboarding", replace: true });

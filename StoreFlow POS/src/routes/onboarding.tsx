@@ -56,14 +56,12 @@ function OnboardingPage() {
   const [form, setForm] = useState({ name: "", slug: "", description: "" });
   const [autoSlug, setAutoSlug] = useState(true);
 
-  // 1. ถ้ายังไม่ได้ล็อกอิน ให้ไปหน้า signin
   useEffect(() => {
     if (!authLoading && !user) {
       navigate({ to: "/signin", replace: true });
     }
   }, [authLoading, user, navigate]);
 
-  // 2. ถ้ามีร้านอยู่แล้ว ให้ไปหน้า /_app/dashboard ทันที
   useEffect(() => {
     if (!user?.id) return;
     let isSubscribed = true;
@@ -81,7 +79,8 @@ function OnboardingPage() {
           return;
         }
         if (data) {
-          navigate({ to: "/_app/dashboard", replace: true });
+          // ใช้ /dashboard ตรงๆ
+          navigate({ to: "/dashboard", replace: true });
         } else {
           setCheckingStore(false);
         }
@@ -118,7 +117,8 @@ function OnboardingPage() {
       return;
     }
     toast.success("สร้างร้านสำเร็จ!");
-    navigate({ to: "/_app/dashboard", replace: true });
+    // ใช้ /dashboard ตรงๆ
+    navigate({ to: "/dashboard", replace: true });
   };
 
   if (authLoading || checkingStore || !user) {
