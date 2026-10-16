@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Header } from "@/components/Header";
@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
+import { useStore } from "@/lib/store-context";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Store } from "lucide-react";
 
@@ -51,45 +52,10 @@ function OnboardingPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
+  const { refresh } = useStore();
   const [loading, setLoading] = useState(false);
-  const [checkingStore, setCheckingStore] = useState(true);
   const [form, setForm] = useState({ name: "", slug: "", description: "" });
   const [autoSlug, setAutoSlug] = useState(true);
-
-  useEffect(() => {
-    if (!authLoading && !user) {
-      navigate({ to: "/signin", replace: true });
-    }
-  }, [authLoading, user, navigate]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    let isSubscribed = true;
-
-    supabase
-      .from("stores")
-      .select("id")
-      .eq("owner_id", user.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!isSubscribed) return;
-        if (error) {
-          console.error("Error checking store:", error);
-          setCheckingStore(false);
-          return;
-        }
-        if (data) {
-          // ใช้ /dashboard ตรงๆ
-          navigate({ to: "/dashboard", replace: true });
-        } else {
-          setCheckingStore(false);
-        }
-      });
-
-    return () => {
-      isSubscribed = false;
-    };
-  }, [user?.id, navigate]);
 
   const handleNameChange = (val: string) => {
     setForm((f) => ({ ...f, name: val, slug: autoSlug ? slugify(val) : f.slug }));
@@ -110,18 +76,21 @@ function OnboardingPage() {
       slug: parsed.data.slug,
       description: parsed.data.description || null,
     });
-    setLoading(false);
+    
     if (error) {
+      setLoading(false);
       if (error.code === "23505") toast.error("URL ร้านนี้ถูกใช้แล้ว กรุณาเลือกใหม่");
       else toast.error(error.message);
       return;
     }
+
     toast.success("สร้างร้านสำเร็จ!");
-    // ใช้ /dashboard ตรงๆ
+    await refresh(); // อัปเดตข้อมูลร้านใน Context
+    setLoading(false);
     navigate({ to: "/dashboard", replace: true });
   };
 
-  if (authLoading || checkingStore || !user) {
+  if (authLoading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
