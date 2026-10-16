@@ -46,7 +46,7 @@ function AppLayout() {
 
   if (loading || checkingSession || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
@@ -66,6 +66,7 @@ function Shell() {
   const { lang, setLang } = useI18n();
   const navigate = useNavigate();
 
+  // ส่งไป /onboarding เฉพาะตอนที่ StoreProvider โหลดเสร็จเด็ดขาด (loading === false) แล้วยืนยันว่าไม่มีร้านจริงๆ
   useEffect(() => {
     if (!loading && !store) {
       navigate({ to: "/onboarding", replace: true });

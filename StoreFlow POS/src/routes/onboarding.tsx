@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, useRef, type FormEvent } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Header } from "@/components/Header";
@@ -55,6 +55,7 @@ function OnboardingPage() {
   const [checkingStore, setCheckingStore] = useState(true);
   const [form, setForm] = useState({ name: "", slug: "", description: "" });
   const [autoSlug, setAutoSlug] = useState(true);
+  const checkedRef = useRef(false);
 
   // 1. เช็กการล็อกอิน
   useEffect(() => {
@@ -63,10 +64,10 @@ function OnboardingPage() {
     }
   }, [authLoading, user, navigate]);
 
-  // 2. เช็กว่าถ้าผู้ใช้มีร้านอยู่ในระบบแล้ว ให้เด้งไป /dashboard ทันที
+  // 2. เช็กร้านค้า (รันครั้งเดียวต่อการโหลด เพื่อกันลูปกระพริบ)
   useEffect(() => {
-    if (!user?.id) return;
-    let isSubscribed = true;
+    if (!user?.id || checkedRef.current) return;
+    checkedRef.current = true;
 
     supabase
       .from("stores")
@@ -75,23 +76,17 @@ function OnboardingPage() {
       .limit(1)
       .maybeSingle()
       .then(({ data, error }) => {
-        if (!isSubscribed) return;
         if (error) {
           console.error("Error checking store:", error);
           setCheckingStore(false);
           return;
         }
         if (data) {
-          // ถ้ามีร้านอยู่แล้ว ส่งไปหน้า dashboard ทันที
           navigate({ to: "/dashboard", replace: true });
         } else {
           setCheckingStore(false);
         }
       });
-
-    return () => {
-      isSubscribed = false;
-    };
   }, [user?.id, navigate]);
 
   const handleNameChange = (val: string) => {
@@ -123,14 +118,12 @@ function OnboardingPage() {
 
     toast.success("สร้างร้านสำเร็จ!");
     setLoading(false);
-    
-    // หลังสร้างเสร็จ นำผู้ใช้เข้าหน้า dashboard ทันที
     navigate({ to: "/dashboard", replace: true });
   };
 
   if (authLoading || checkingStore || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
