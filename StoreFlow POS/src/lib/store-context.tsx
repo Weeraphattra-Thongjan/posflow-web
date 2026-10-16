@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 
@@ -32,18 +32,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     setLoading(true);
     try {
-      const [{ data: admin }, { data: storeData }] = await Promise.all([
+      const [{ data: admin }, { data }] = await Promise.all([
         supabase.from("app_admins").select("user_id").eq("user_id", user.id).maybeSingle(),
         supabase.from("stores").select("id, name, slug, status, owner_id").eq("owner_id", user.id).limit(1).maybeSingle(),
       ]);
 
-      if (!storeData && admin) {
+      if (!data && admin) {
         setStore({ id: "__admin__", name: "Admin", slug: "admin", status: "active", owner_id: user.id });
       } else {
-        setStore(storeData ?? null);
+        setStore(data ?? null);
       }
     } catch (err) {
-      console.error("Failed to load store:", err);
+      console.error("Error loading store:", err);
       setStore(null);
     } finally {
       setLoading(false);
@@ -52,20 +52,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (authLoading) return;
-    if (user) {
-      load();
-    } else {
-      setStore(null);
-      setLoading(false);
-    }
+    load();
   }, [user, authLoading, load]);
 
-  const value = useMemo(
-    () => ({ store, loading: loading || authLoading, refresh: load }),
-    [store, loading, authLoading, load]
-  );
-
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ store, loading: loading || authLoading, refresh: load }}>{children}</Ctx.Provider>;
 }
 
 export function useStore() {

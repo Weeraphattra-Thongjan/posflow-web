@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, useRef, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Header } from "@/components/Header";
@@ -52,42 +52,31 @@ function OnboardingPage() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [checkingStore, setCheckingStore] = useState(true);
   const [form, setForm] = useState({ name: "", slug: "", description: "" });
   const [autoSlug, setAutoSlug] = useState(true);
-  const checkedRef = useRef(false);
 
-  // 1. เช็กการล็อกอิน
   useEffect(() => {
-    if (!authLoading && !user) {
-      navigate({ to: "/signin", replace: true });
-    }
+    if (!authLoading && !user) navigate({ to: "/signin", replace: true });
   }, [authLoading, user, navigate]);
 
-  // 2. เช็กร้านค้า (รันครั้งเดียวต่อการโหลด เพื่อกันลูปกระพริบ)
+  // check existing store
   useEffect(() => {
-    if (!user?.id || checkedRef.current) return;
-    checkedRef.current = true;
-
+    if (!user) return;
+    let isMounted = true;
     supabase
       .from("stores")
       .select("id")
       .eq("owner_id", user.id)
       .limit(1)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("Error checking store:", error);
-          setCheckingStore(false);
-          return;
-        }
-        if (data) {
+      .then(({ data }) => {
+        if (isMounted && data && data.length > 0) {
           navigate({ to: "/dashboard", replace: true });
-        } else {
-          setCheckingStore(false);
         }
       });
-  }, [user?.id, navigate]);
+    return () => {
+      isMounted = false;
+    };
+  }, [user, navigate]);
 
   const handleNameChange = (val: string) => {
     setForm((f) => ({ ...f, name: val, slug: autoSlug ? slugify(val) : f.slug }));
@@ -108,22 +97,19 @@ function OnboardingPage() {
       slug: parsed.data.slug,
       description: parsed.data.description || null,
     });
-    
+    setLoading(false);
     if (error) {
-      setLoading(false);
       if (error.code === "23505") toast.error("URL ร้านนี้ถูกใช้แล้ว กรุณาเลือกใหม่");
       else toast.error(error.message);
       return;
     }
-
     toast.success("สร้างร้านสำเร็จ!");
-    setLoading(false);
     navigate({ to: "/dashboard", replace: true });
   };
 
-  if (authLoading || checkingStore || !user) {
+  if (authLoading || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
