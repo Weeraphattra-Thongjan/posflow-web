@@ -56,34 +56,39 @@ function OnboardingPage() {
   const [form, setForm] = useState({ name: "", slug: "", description: "" });
   const [autoSlug, setAutoSlug] = useState(true);
 
-  // 1. Guard เช็กการล็อกอิน
+  // 1. ตรวจสอบสถานะการล็อกอิน
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate({ to: "/signin" });
+      navigate({ to: "/signin", replace: true });
     }
   }, [authLoading, user, navigate]);
 
-  // 2. เช็กว่าผู้ใช้มีร้านหรือยัง (รันเพียงครั้งเดียวต่อ user.id)
+  // 2. เช็กว่ามีร้านค้าหรือยัง (ถ้ามีแล้วจะส่งไป /dashboard ทันที)
   useEffect(() => {
     if (!user?.id) return;
-    let isMounted = true;
+    let isSubscribed = true;
 
     supabase
       .from("stores")
       .select("id")
       .eq("owner_id", user.id)
-      .limit(1)
-      .then(({ data }) => {
-        if (!isMounted) return;
-        if (data && data.length > 0) {
-          navigate({ to: "/dashboard" });
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!isSubscribed) return;
+        if (error) {
+          console.error("Error checking store:", error);
+          setCheckingStore(false);
+          return;
+        }
+        if (data) {
+          navigate({ to: "/dashboard", replace: true });
         } else {
           setCheckingStore(false);
         }
       });
 
     return () => {
-      isMounted = false;
+      isSubscribed = false;
     };
   }, [user?.id, navigate]);
 
@@ -113,7 +118,7 @@ function OnboardingPage() {
       return;
     }
     toast.success("สร้างร้านสำเร็จ!");
-    navigate({ to: "/dashboard" });
+    navigate({ to: "/dashboard", replace: true });
   };
 
   if (authLoading || checkingStore || !user) {
