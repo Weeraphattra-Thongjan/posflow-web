@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Header } from "@/components/Header";
@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
-import { useStore } from "@/lib/store-context";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Store } from "lucide-react";
 
@@ -52,10 +51,16 @@ function OnboardingPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const { refresh } = useStore();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ name: "", slug: "", description: "" });
   const [autoSlug, setAutoSlug] = useState(true);
+
+  // 1. เช็กสถานะการล็อกอิน
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate({ to: "/signin", replace: true });
+    }
+  }, [authLoading, user, navigate]);
 
   const handleNameChange = (val: string) => {
     setForm((f) => ({ ...f, name: val, slug: autoSlug ? slugify(val) : f.slug }));
@@ -85,9 +90,9 @@ function OnboardingPage() {
     }
 
     toast.success("สร้างร้านสำเร็จ!");
-    await refresh(); // อัปเดตข้อมูลร้านใน Context
     setLoading(false);
-    navigate({ to: "/dashboard", replace: true });
+    // Hard refresh ไปหน้า /dashboard เพื่อให้ StoreProvider โหลดข้อมูลร้านค้าใหม่แบบสะอาด 100%
+    window.location.href = "/dashboard";
   };
 
   if (authLoading || !user) {
