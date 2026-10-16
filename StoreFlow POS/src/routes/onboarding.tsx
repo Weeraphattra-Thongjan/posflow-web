@@ -52,15 +52,47 @@ function OnboardingPage() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [checkingStore, setCheckingStore] = useState(true);
   const [form, setForm] = useState({ name: "", slug: "", description: "" });
   const [autoSlug, setAutoSlug] = useState(true);
 
-  // 1. เช็กสถานะการล็อกอิน
+  // 1. เช็กการล็อกอิน
   useEffect(() => {
     if (!authLoading && !user) {
       navigate({ to: "/signin", replace: true });
     }
   }, [authLoading, user, navigate]);
+
+  // 2. เช็กว่าถ้าผู้ใช้มีร้านอยู่ในระบบแล้ว ให้เด้งไป /dashboard ทันที
+  useEffect(() => {
+    if (!user?.id) return;
+    let isSubscribed = true;
+
+    supabase
+      .from("stores")
+      .select("id")
+      .eq("owner_id", user.id)
+      .limit(1)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!isSubscribed) return;
+        if (error) {
+          console.error("Error checking store:", error);
+          setCheckingStore(false);
+          return;
+        }
+        if (data) {
+          // ถ้ามีร้านอยู่แล้ว ส่งไปหน้า dashboard ทันที
+          navigate({ to: "/dashboard", replace: true });
+        } else {
+          setCheckingStore(false);
+        }
+      });
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [user?.id, navigate]);
 
   const handleNameChange = (val: string) => {
     setForm((f) => ({ ...f, name: val, slug: autoSlug ? slugify(val) : f.slug }));
@@ -92,11 +124,11 @@ function OnboardingPage() {
     toast.success("สร้างร้านสำเร็จ!");
     setLoading(false);
     
-    // เปลี่ยนมาใช้ TanStack Router Navigate แทน window.location.href
+    // หลังสร้างเสร็จ นำผู้ใช้เข้าหน้า dashboard ทันที
     navigate({ to: "/dashboard", replace: true });
   };
 
-  if (authLoading || !user) {
+  if (authLoading || checkingStore || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
