@@ -91,8 +91,9 @@ function OnboardingPage() {
 
     toast.success("สร้างร้านสำเร็จ!");
     setLoading(false);
-    // Hard refresh ไปหน้า /dashboard เพื่อให้ StoreProvider โหลดข้อมูลร้านค้าใหม่แบบสะอาด 100%
-    window.location.href = "/dashboard";
+    
+    // เปลี่ยนมาใช้ TanStack Router Navigate แทน window.location.href
+    navigate({ to: "/dashboard", replace: true });
   };
 
   if (authLoading || !user) {
