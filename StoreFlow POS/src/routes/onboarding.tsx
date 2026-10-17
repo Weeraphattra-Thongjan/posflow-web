@@ -55,28 +55,10 @@ function OnboardingPage() {
   const [form, setForm] = useState({ name: "", slug: "", description: "" });
   const [autoSlug, setAutoSlug] = useState(true);
 
+  // เช็กแค่การล็อกอินอย่างเดียว ไม่ต้องเช็กร้านซ้ำซ้อน
   useEffect(() => {
     if (!authLoading && !user) navigate({ to: "/signin", replace: true });
   }, [authLoading, user, navigate]);
-
-  // check existing store
-  useEffect(() => {
-    if (!user) return;
-    let isMounted = true;
-    supabase
-      .from("stores")
-      .select("id")
-      .eq("owner_id", user.id)
-      .limit(1)
-      .then(({ data }) => {
-        if (isMounted && data && data.length > 0) {
-          navigate({ to: "/dashboard", replace: true });
-        }
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [user, navigate]);
 
   const handleNameChange = (val: string) => {
     setForm((f) => ({ ...f, name: val, slug: autoSlug ? slugify(val) : f.slug }));
@@ -104,12 +86,14 @@ function OnboardingPage() {
       return;
     }
     toast.success("สร้างร้านสำเร็จ!");
-    navigate({ to: "/dashboard", replace: true });
+    
+    // หลังสร้างเสร็จ นำผู้ใช้เข้าหน้า dashboard ทันที
+    window.location.href = "/dashboard";
   };
 
   if (authLoading || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
