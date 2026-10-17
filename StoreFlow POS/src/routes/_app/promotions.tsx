@@ -60,6 +60,17 @@ function PromosPage() {
     load();
   };
 
+  const toggleStatus = async (id: string, currentStatus: boolean) => {
+    const { error } = await supabase
+      .from("promotions")
+      .update({ is_active: !currentStatus })
+      .eq("id", id);
+
+    if (error) return toast.error(error.message);
+    toast.success("Updated status");
+    load();
+  };
+
   return (
     <div className="container mx-auto max-w-7xl px-4 py-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -98,10 +109,14 @@ function PromosPage() {
             {Number(p.min_purchase) > 0 && (
               <p className="text-xs text-muted-foreground">Min {thb(Number(p.min_purchase))}</p>
             )}
-            <div className="mt-3">
-              <Badge variant={p.is_active ? "default" : "secondary"}>
+            <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
+              <span className="text-xs font-medium text-muted-foreground">
                 {p.is_active ? t("promo.active") : "Inactive"}
-              </Badge>
+              </span>
+              <Switch
+                checked={p.is_active}
+                onCheckedChange={() => toggleStatus(p.id, p.is_active)}
+              />
             </div>
           </div>
         ))}
