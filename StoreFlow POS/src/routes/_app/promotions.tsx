@@ -60,17 +60,6 @@ function PromosPage() {
     load();
   };
 
-  const toggleStatus = async (id: string, currentStatus: boolean) => {
-    const { error } = await supabase
-      .from("promotions")
-      .update({ is_active: !currentStatus })
-      .eq("id", id);
-
-    if (error) return toast.error(error.message);
-    toast.success("Updated status");
-    load();
-  };
-
   return (
     <div className="container mx-auto max-w-7xl px-4 py-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -109,14 +98,10 @@ function PromosPage() {
             {Number(p.min_purchase) > 0 && (
               <p className="text-xs text-muted-foreground">Min {thb(Number(p.min_purchase))}</p>
             )}
-            <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
-              <span className="text-xs font-medium text-muted-foreground">
+            <div className="mt-3">
+              <Badge variant={p.is_active ? "default" : "secondary"}>
                 {p.is_active ? t("promo.active") : "Inactive"}
-              </span>
-              <Switch
-                checked={p.is_active}
-                onCheckedChange={() => toggleStatus(p.id, p.is_active)}
-              />
+              </Badge>
             </div>
           </div>
         ))}
@@ -139,9 +124,9 @@ function PromosPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>{t("promo.value")}</Label><Input type="number" value={form.discount_value} onChange={(e) => setForm({ ...form, discount_value: Number(e.target.value) })} /></div>
+              <div><Label>{t("promo.value")}</Label><Input type="number" value={form.discount_value === 0 ? "" : form.discount_value} placeholder="0" onChange={(e) => setForm({ ...form, discount_value: e.target.value === "" ? 0 : Number(e.target.value) })} /></div>
             </div>
-            <div><Label>{t("promo.min")}</Label><Input type="number" value={form.min_purchase} onChange={(e) => setForm({ ...form, min_purchase: Number(e.target.value) })} /></div>
+            <div><Label>{t("promo.min")}</Label><Input type="number" value={form.min_purchase === 0 ? "" : form.min_purchase} placeholder="0" onChange={(e) => setForm({ ...form, min_purchase: e.target.value === "" ? 0 : Number(e.target.value) })} /></div>
             <div className="flex items-center justify-between rounded-lg border border-border p-3">
               <Label>{t("promo.active")}</Label>
               <Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} />

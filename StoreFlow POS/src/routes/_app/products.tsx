@@ -162,33 +162,15 @@ function ProductsPage() {
             <DialogTitle>{editing ? t("common.edit") : t("prod.add")}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
-            <div>
-              <Label>{t("prod.name")}</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </div>
-            <div>
-              <Label>{t("prod.sku")}</Label>
-              <Input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>{t("prod.price")}</Label>
-                <Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} />
-              </div>
-              <div>
-                <Label>{t("prod.cost")}</Label>
-                <Input type="number" value={form.cost} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} />
-              </div>
-              <div>
-                <Label>{t("prod.stock")}</Label>
-                <Input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })} />
-              </div>
-              <div>
-                <Label>{t("prod.threshold")}</Label>
-                <Input type="number" value={form.low_stock_threshold} onChange={(e) => setForm({ ...form, low_stock_threshold: Number(e.target.value) })} />
-              </div>
-            </div>
+            <div><Label>{t("prod.name")}</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+            <div><Label>{t("prod.sku")}</Label><Input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label>{t("prod.price")}</Label><Input type="number" value={form.price === 0 ? "" : form.price} placeholder="0" onChange={(e) => setForm({ ...form, price: e.target.value === "" ? 0 : Number(e.target.value) })} /></div>
+            <div><Label>{t("prod.cost")}</Label><Input type="number" value={form.cost === 0 ? "" : form.cost} placeholder="0" onChange={(e) => setForm({ ...form, cost: e.target.value === "" ? 0 : Number(e.target.value) })} /></div>
+            <div><Label>{t("prod.stock")}</Label><Input type="number" value={form.stock === 0 ? "" : form.stock} placeholder="0" onChange={(e) => setForm({ ...form, stock: e.target.value === "" ? 0 : Number(e.target.value) })} /></div>
+            <div><Label>{t("prod.threshold")}</Label><Input type="number" value={form.low_stock_threshold === 0 ? "" : form.low_stock_threshold} placeholder="0" onChange={(e) => setForm({ ...form, low_stock_threshold: e.target.value === "" ? 0 : Number(e.target.value) })} /></div>
           </div>
+        </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>{t("common.cancel")}</Button>
             <Button onClick={save} className="bg-gradient-primary text-primary-foreground">{t("common.save")}</Button>
