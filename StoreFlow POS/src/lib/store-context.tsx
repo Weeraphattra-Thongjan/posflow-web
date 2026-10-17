@@ -30,21 +30,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setLoading(true);
     try {
-      const [{ data: admin }, { data }] = await Promise.all([
-        supabase.from("app_admins").select("user_id").eq("user_id", user.id).maybeSingle(),
-        supabase.from("stores").select("id, name, slug, status, owner_id").eq("owner_id", user.id).limit(1).maybeSingle(),
-      ]);
+      // ดึงข้อมูลร้านค้าจาก owner_id
+      const { data, error } = await supabase
+        .from("stores")
+        .select("id, name, slug, status, owner_id")
+        .eq("owner_id", user.id)
+        .limit(1)
+        .maybeSingle();
 
-      if (!data && admin) {
-        setStore({ id: "__admin__", name: "Admin", slug: "admin", status: "active", owner_id: user.id });
+      if (error) {
+        console.error("Store fetch error:", error);
+      }
+
+      if (data) {
+        setStore(data);
       } else {
-        setStore(data ?? null);
+        // เช็กสิทธิ์ Admin ถ้าไม่มีร้าน
+        const { data: admin } = await supabase
+          .from("app_admins")
+          .select("user_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (admin) {
+          setStore({ id: "__admin__", name: "Admin", slug: "admin", status: "active", owner_id: user.id });
+        } else {
+          setStore(null);
+        }
       }
     } catch (err) {
       console.error("Error loading store:", err);
-      setStore(null);
     } finally {
       setLoading(false);
     }
@@ -55,7 +71,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     load();
   }, [user, authLoading, load]);
 
-  return <Ctx.Provider value={{ store, loading: loading || authLoading, refresh: load }}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={{ store, loading: loading || authLoading, refresh: load }}>
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export function useStore() {
