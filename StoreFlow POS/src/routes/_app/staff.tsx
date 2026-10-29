@@ -26,6 +26,7 @@ function StaffPage() {
   const { t } = useI18n();
   const [items, setItems] = useState<Invite[]>([]);
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ email: "", role: "cashier" });
 
   const load = async () => {
@@ -38,12 +39,50 @@ function StaffPage() {
 
   const save = async () => {
     if (!store || !user || !form.email.trim()) return;
-    const { error } = await supabase.from("staff_invites").insert({
-      store_id: store.id, email: form.email.trim().toLowerCase(),
-      role: form.role as "cashier" | "owner", invited_by: user.id,
+    setLoading(true);
+
+    const email = form.email.trim().toLowerCase();
+    
+    // URL ที่จะพาพนักงานไปหลังกดลิงก์ในอีเมล
+    const redirectUrl = `${window.location.origin}/accept-invite?store_id=${store.id}&role=${form.role}`;
+
+    // 1. บันทึกคำเชิญลงในตาราง staff_invites ก่อน
+    const { error: dbError } = await supabase.from("staff_invites").upsert({
+      store_id: store.id,
+      email,
+      role: form.role as "cashier" | "owner",
+      invited_by: user.id,
+      status: "pending"
+    }, { onConflict: "store_id,email" });
+
+    if (dbError) {
+      setLoading(false);
+      return toast.error(dbError.message);
+    }
+
+    // 2. ส่ง Magic Link / OTP เข้าอีเมลพนักงาน
+    const { error: otpError } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: {
+          store_name: store.name,
+          store_id: store.id,
+          role: form.role
+        }
+      }
     });
-    if (error) return toast.error(error.message);
-    toast.success("Invited"); setOpen(false); setForm({ email: "", role: "cashier" }); load();
+
+    setLoading(false);
+
+    if (otpError) {
+      return toast.error(`ส่งอีเมลไม่สำเร็จ: ${otpError.message}`);
+    }
+
+    toast.success("ส่งอีเมลเชิญพนักงานเรียบร้อยแล้ว!");
+    setOpen(false);
+    setForm({ email: "", role: "cashier" });
+    load();
   };
 
   const remove = async (id: string) => {
@@ -79,9 +118,13 @@ function StaffPage() {
             <tbody>
               {items.map((i) => (
                 <tr key={i.id} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
-                  <td className="px-4 py-3">{i.email}</td>
+                  <td className="px-4 py-3 font-medium">{i.email}</td>
                   <td className="px-4 py-3"><Badge variant="secondary">{i.role}</Badge></td>
-                  <td className="px-4 py-3"><Badge>{t("staff.pending")}</Badge></td>
+                  <td className="px-4 py-3">
+                    <Badge variant={i.status === "accepted" ? "default" : "outline"}>
+                      {i.status === "accepted" ? "ตอบรับแล้ว" : t("staff.pending")}
+                    </Badge>
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <Button size="icon" variant="ghost" onClick={() => remove(i.id)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
@@ -98,7 +141,15 @@ function StaffPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>{t("staff.invite")}</DialogTitle></DialogHeader>
           <div className="grid gap-3">
-            <div><Label>{t("staff.email")}</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+            <div>
+              <Label>{t("staff.email")}</Label>
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="employee@gmail.com"
+              />
+            </div>
             <div>
               <Label>{t("staff.role")}</Label>
               <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
@@ -112,7 +163,9 @@ function StaffPage() {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>{t("common.cancel")}</Button>
-            <Button onClick={save} className="bg-gradient-primary text-primary-foreground">{t("common.save")}</Button>
+            <Button onClick={save} disabled={loading} className="bg-gradient-primary text-primary-foreground">
+              {loading ? "กำลังส่งคำเชิญ..." : t("common.save")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
