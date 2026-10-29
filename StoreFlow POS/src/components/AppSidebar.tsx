@@ -39,7 +39,7 @@ export function AppSidebar() {
     { key: "promotions", to: "/promotions", icon: Tag, label: t("side.promos") },
     { key: "sales", to: "/sales", icon: Receipt, label: t("side.sales") },
     { key: "reports", to: "/reports", icon: BarChart3, label: t("side.reports") },
-    { key: "staff", to: "/staff", icon: Users, label: t("side.staff") },
+    { key: "staff", to: "/app/staff", icon: Users, label: t("side.staff") },
   ];
   const onAdminPage = path.startsWith("/admin");
   const adminItem = { key: "admin" as const, to: "/admin", icon: ShieldAlert, label: t("side.admin") };
