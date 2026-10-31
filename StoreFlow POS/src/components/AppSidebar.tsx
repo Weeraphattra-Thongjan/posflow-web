@@ -2,19 +2,16 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   LayoutGrid, Monitor, Package, Tag, Receipt, BarChart3, Users, LogOut, ShieldAlert,
-  ChevronsUpDown, Check,
+  ChevronsUpDown,
 } from "lucide-react";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { StorePicker } from "@/components/StorePicker";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useI18n } from "@/lib/i18n";
-import { useStore, ACTIVE_STORE_KEY } from "@/lib/store-context";
+import { useStore, clearStoreChoice } from "@/lib/store-context";
 import { useAuth } from "@/lib/auth";
 import { useMenuPrefs, type MenuKey } from "@/lib/menu-prefs";
 import { getCustomIcon } from "@/lib/custom-icons";
@@ -25,8 +22,9 @@ const CASHIER_MENUS: MenuKey[] = ["dashboard", "pos", "promotions", "sales"];
 
 export function AppSidebar() {
   const { t } = useI18n();
-  const { store, role, stores, switchStore, loading: storeLoading } = useStore();
+  const { store, role, stores, switchStore, needsSelection, loading: storeLoading } = useStore();
   const canSwitch = stores.length > 1;
+  const [pickerOpen, setPickerOpen] = useState(false);
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { state } = useSidebar();
@@ -60,11 +58,11 @@ export function AppSidebar() {
   // กันพนักงานพิมพ์ URL เข้าหน้าที่ไม่มีสิทธิ์ → ส่งกลับไปหน้าขาย
   // (เป็นแค่ฝั่ง UI ข้อมูลจริงต้องกันด้วย RLS ใน Supabase)
   useEffect(() => {
-    if (storeLoading || !isCashier) return;
+    if (storeLoading || needsSelection || !isCashier) return;
     const allowed = roleItems.some((i) => path === i.to || path.startsWith(i.to + "/"));
     if (!allowed) navigate({ to: "/pos", replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, isCashier, storeLoading]);
+  }, [path, isCashier, storeLoading, needsSelection]);
 
   const onAdminPage = path.startsWith("/admin");
   const adminItem = { key: "admin" as const, to: "/admin", icon: ShieldAlert, label: t("side.admin") };
@@ -79,10 +77,11 @@ export function AppSidebar() {
   const roleText = (r: string | null) => (r === "cashier" ? "พนักงานขาย" : t("side.owner"));
   const roleLabel = roleText(role);
 
-  const handleSwitch = (id: string) => {
-    if (id === store?.id) return;
+  // ยืนยันเลือกร้านจากหน้าจอเลือกร้าน
+  const handleChoose = (id: string) => {
     switchStore(id);
-    // กลับหน้าขาย (ทุกตำแหน่งเข้าได้) กันค้างอยู่หน้าที่ร้านใหม่ไม่มีสิทธิ์
+    setPickerOpen(false);
+    // เข้าหน้าขาย (ทุกตำแหน่งเข้าได้) กันค้างอยู่หน้าที่ร้านใหม่ไม่มีสิทธิ์
     navigate({ to: "/pos" });
   };
 
@@ -104,11 +103,8 @@ export function AppSidebar() {
   );
 
   const handleSignOut = async () => {
-    try {
-      localStorage.removeItem(ACTIVE_STORE_KEY);
-    } catch {
-      /* ไม่เป็นไร */
-    }
+    clearStoreChoice(); // ครั้งหน้าต้องเลือกร้านใหม่
+    setPickerOpen(false);
     await signOut();
     navigate({ to: "/" });
   };
@@ -117,38 +113,15 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
         {canSwitch ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="rounded-lg transition hover:bg-sidebar-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-                aria-label="สลับร้าน"
-                title="สลับร้าน"
-              >
-                {storeHeader}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64">
-              <DropdownMenuLabel className="text-xs text-muted-foreground">สลับร้าน</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {stores.map((o) => (
-                <DropdownMenuItem
-                  key={o.store.id}
-                  onSelect={() => handleSwitch(o.store.id)}
-                  className="flex items-center gap-3 py-2"
-                >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
-                    {o.store.name?.[0]?.toUpperCase() ?? "S"}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{o.store.name}</p>
-                    <p className="truncate text-xs text-muted-foreground">{roleText(o.role)}</p>
-                  </div>
-                  {o.store.id === store?.id && <Check className="h-4 w-4 shrink-0 text-primary" />}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="rounded-lg transition hover:bg-sidebar-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+            aria-label="เปลี่ยนร้านค้า"
+            title="เปลี่ยนร้านค้า"
+          >
+            {storeHeader}
+          </button>
         ) : (
           storeHeader
         )}
@@ -212,6 +185,17 @@ export function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+
+      {/* หลังเข้าสู่ระบบ: บังคับเลือกร้านก่อน (ปิดไม่ได้) / ระหว่างใช้งาน: เปลี่ยนร้านพร้อมยืนยัน */}
+      <StorePicker
+        open={needsSelection || pickerOpen}
+        closable={!needsSelection}
+        stores={stores}
+        currentStoreId={store?.id}
+        onChoose={handleChoose}
+        onClose={() => setPickerOpen(false)}
+        onSignOut={handleSignOut}
+      />
     </Sidebar>
   );
 }

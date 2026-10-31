@@ -25,11 +25,40 @@ interface StoreCtx {
   loading: boolean;
   refresh: () => Promise<void>;
   switchStore: (storeId: string) => void;
+  // true = มีหลายร้านแต่ยังไม่ได้เลือกร้านในการเข้าสู่ระบบรอบนี้ → ต้องแสดงหน้าเลือกร้าน
+  needsSelection: boolean;
 }
 
 const Ctx = createContext<StoreCtx | null>(null);
 
 export const ACTIVE_STORE_KEY = "pos_active_store_id";
+// เลือกร้านแล้วในการเข้าสู่ระบบรอบนี้ (เก็บใน sessionStorage: ปิดแท็บ/ออกจากระบบแล้วต้องเลือกใหม่)
+export const STORE_CHOSEN_KEY = "pos_store_chosen";
+
+function readChosen(): boolean {
+  try {
+    return sessionStorage.getItem(STORE_CHOSEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function markStoreChosen() {
+  try {
+    sessionStorage.setItem(STORE_CHOSEN_KEY, "1");
+  } catch {
+    /* ไม่เป็นไร */
+  }
+}
+
+export function clearStoreChoice() {
+  try {
+    sessionStorage.removeItem(STORE_CHOSEN_KEY);
+    localStorage.removeItem(ACTIVE_STORE_KEY);
+  } catch {
+    /* ไม่เป็นไร */
+  }
+}
 
 function readActiveStoreId(): string | null {
   try {
@@ -55,6 +84,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<StoreRole | null>(null);
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [chosen, setChosen] = useState<boolean>(() => readChosen());
 
   const applyChoice = useCallback((options: StoreOption[]) => {
     // เลือกร้านที่เคยใช้ล่าสุด ถ้าไม่มีให้ใช้ร้านที่เป็นเจ้าของก่อน แล้วค่อยร้านที่เป็นพนักงาน
@@ -149,6 +179,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const next = stores.find((o) => o.store.id === storeId);
       if (!next) return;
       writeActiveStoreId(storeId);
+      markStoreChosen();
+      setChosen(true);
       setStore(next.store);
       setRole(next.role);
     },
@@ -157,12 +189,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (authLoading) return;
+    // ออกจากระบบแล้ว → ล้างการเลือกร้าน ให้เลือกใหม่ตอนเข้าสู่ระบบครั้งถัดไป
+    if (!user) {
+      clearStoreChoice();
+      setChosen(false);
+    } else {
+      setChosen(readChosen());
+    }
     load();
   }, [user, authLoading, load]);
 
+  const isLoading = loading || authLoading;
+  const needsSelection = !isLoading && stores.length > 1 && !chosen;
+
   return (
     <Ctx.Provider
-      value={{ store, role, stores, loading: loading || authLoading, refresh: load, switchStore }}
+      value={{ store, role, stores, loading: isLoading, refresh: load, switchStore, needsSelection }}
     >
       {children}
     </Ctx.Provider>

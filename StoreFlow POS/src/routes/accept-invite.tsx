@@ -55,6 +55,8 @@ const rpc = supabase.rpc.bind(supabase) as unknown as (
 function goToStore(storeId: string) {
   try {
     localStorage.setItem(ACTIVE_STORE_KEY, storeId);
+    // เพิ่งเลือกร้านจากลิงก์คำเชิญแล้ว ไม่ต้องขึ้นหน้าเลือกร้านซ้ำ
+    sessionStorage.setItem("pos_store_chosen", "1");
   } catch {
     /* ไม่เป็นไร */
   }
