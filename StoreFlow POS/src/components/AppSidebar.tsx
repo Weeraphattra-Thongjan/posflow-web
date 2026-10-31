@@ -2,7 +2,7 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   LayoutGrid, Monitor, Package, Tag, Receipt, BarChart3, Users, LogOut, ShieldAlert,
-  ChevronsUpDown,
+  ChevronsUpDown, History,
 } from "lucide-react";
 import { StorePicker } from "@/components/StorePicker";
 import {
@@ -17,12 +17,12 @@ import { useMenuPrefs, type MenuKey } from "@/lib/menu-prefs";
 import { getCustomIcon } from "@/lib/custom-icons";
 import { supabase } from "@/integrations/supabase/client";
 
-// เมนูที่พนักงานขาย (Cashier) เห็นได้ — แก้ตรงนี้ที่เดียว
-const CASHIER_MENUS: MenuKey[] = ["dashboard", "pos", "promotions", "sales"];
+// พนักงานขาย (Cashier) เห็นทุกเมนูเหมือนเจ้าของร้าน
+// ทุกการแก้ไขถูกบันทึกในหน้า "ประวัติการแก้ไข" (audit_logs) โดย trigger ในฐานข้อมูล
 
 export function AppSidebar() {
   const { t } = useI18n();
-  const { store, role, stores, switchStore, needsSelection, loading: storeLoading } = useStore();
+  const { store, role, stores, switchStore, needsSelection } = useStore();
   const canSwitch = stores.length > 1;
   const [pickerOpen, setPickerOpen] = useState(false);
   const { user, signOut } = useAuth();
@@ -32,7 +32,6 @@ export function AppSidebar() {
   const path = useRouterState({ select: (r) => r.location.pathname });
   const [isAdmin, setIsAdmin] = useState(false);
   const { hidden, customItems } = useMenuPrefs();
-  const isCashier = role === "cashier";
 
   useEffect(() => {
     if (!user) return;
@@ -48,21 +47,11 @@ export function AppSidebar() {
     { key: "sales", to: "/sales", icon: Receipt, label: t("side.sales") },
     { key: "reports", to: "/reports", icon: BarChart3, label: t("side.reports") },
     { key: "staff", to: "/staff", icon: Users, label: t("side.staff") },
+    { key: "activity" as MenuKey, to: "/activity", icon: History, label: "ประวัติการแก้ไข" },
   ];
 
-  // กรองเมนูตามบทบาท
-  const roleItems = isCashier
-    ? allItems.filter((i) => CASHIER_MENUS.includes(i.key))
-    : allItems;
-
-  // กันพนักงานพิมพ์ URL เข้าหน้าที่ไม่มีสิทธิ์ → ส่งกลับไปหน้าขาย
-  // (เป็นแค่ฝั่ง UI ข้อมูลจริงต้องกันด้วย RLS ใน Supabase)
-  useEffect(() => {
-    if (storeLoading || needsSelection || !isCashier) return;
-    const allowed = roleItems.some((i) => path === i.to || path.startsWith(i.to + "/"));
-    if (!allowed) navigate({ to: "/pos", replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, isCashier, storeLoading, needsSelection]);
+  // ทุกบทบาทเห็นเมนูเท่ากัน
+  const roleItems = allItems;
 
   const onAdminPage = path.startsWith("/admin");
   const adminItem = { key: "admin" as const, to: "/admin", icon: ShieldAlert, label: t("side.admin") };
@@ -81,7 +70,6 @@ export function AppSidebar() {
   const handleChoose = (id: string) => {
     switchStore(id);
     setPickerOpen(false);
-    // เข้าหน้าขาย (ทุกตำแหน่งเข้าได้) กันค้างอยู่หน้าที่ร้านใหม่ไม่มีสิทธิ์
     navigate({ to: "/pos" });
   };
 
@@ -149,7 +137,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {!onAdminPage && !isCashier && customItems.length > 0 && (
+        {!onAdminPage && customItems.length > 0 && (
           <SidebarGroup>
             {!collapsed && <SidebarGroupLabel>{t("side.store_menu")}</SidebarGroupLabel>}
             <SidebarGroupContent>
