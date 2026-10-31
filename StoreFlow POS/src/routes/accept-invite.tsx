@@ -20,9 +20,10 @@ type InviteInfo = {
   email: string;
   role: string;
   status: string;
+  has_account?: boolean;
 };
 
-type View = "loading" | "invalid" | "used" | "other-account" | "join" | "form";
+type View = "loading" | "invalid" | "used" | "other-account" | "join" | "login" | "form";
 
 const MIN_PASSWORD = 6;
 const ACTIVE_STORE_KEY = "pos_active_store_id";
@@ -103,6 +104,8 @@ function AcceptInvitePage() {
         setView("join"); // ล็อกอินด้วยอีเมลนี้อยู่แล้ว กดเข้าร้านได้เลย
       } else if (info.status === "accepted") {
         setView("used");
+      } else if (info.has_account) {
+        setView("login"); // มีบัญชีอยู่แล้ว → ใส่รหัสเดิมเพื่อเข้าร้าน
       } else {
         setView("form");
       }
@@ -127,7 +130,15 @@ function AcceptInvitePage() {
     try {
       const { error } = await callInvite({ action: "accept", token, password });
       if (error) {
-        if (error.code === "user_exists" || error.code === "used") {
+        if (error.code === "user_exists") {
+          // มีบัญชีอยู่แล้ว → สลับไปให้ใส่รหัสเดิม
+          setPassword("");
+          setConfirm("");
+          setView("login");
+          toast.info("อีเมลนี้มีบัญชีอยู่แล้ว กรุณาใส่รหัสผ่านเดิม");
+          return;
+        }
+        if (error.code === "used") {
           setMessage(error.message);
           setView("used");
           return;
@@ -145,6 +156,41 @@ function AcceptInvitePage() {
       goToStore(invite.store_id);
     } catch (err: any) {
       toast.error("เกิดข้อผิดพลาด: " + (err?.message ?? "ไม่สามารถตอบรับคำเชิญได้"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // มีบัญชีอยู่แล้ว (เช่น พนักงานเก่าถูกเชิญกลับ) → ล็อกอินด้วยรหัสเดิม แล้วตอบรับ
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!invite) return;
+    if (!password) {
+      toast.error("กรุณากรอกรหัสผ่าน");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: invite.email,
+        password,
+      });
+      if (signInError) {
+        throw new Error(
+          /invalid/i.test(signInError.message)
+            ? "รหัสผ่านไม่ถูกต้อง ถ้าจำไม่ได้ กด \"ลืมรหัสผ่าน?\""
+            : signInError.message
+        );
+      }
+
+      const { error } = await rpc("accept_staff_invite", { p_store_id: invite.store_id });
+      if (error) throw new Error(error.message);
+
+      toast.success(`เข้าสู่ร้าน ${invite.store_name} สำเร็จ!`);
+      goToStore(invite.store_id);
+    } catch (err: any) {
+      toast.error(err?.message ?? "ไม่สามารถเข้าร้านได้");
     } finally {
       setSubmitting(false);
     }
@@ -238,6 +284,65 @@ function AcceptInvitePage() {
               เข้าร้าน
             </Button>
           </div>
+        )}
+
+        {view === "login" && invite && (
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                <StoreIcon className="h-7 w-7" />
+              </div>
+              <h1 className="text-xl font-bold">คุณได้รับเชิญเข้าร้าน {invite.store_name}</h1>
+              <p className="text-sm text-muted-foreground">
+                ตำแหน่ง: {roleLabel} · อีเมลนี้มีบัญชีอยู่แล้ว ใส่รหัสผ่านเดิมเพื่อเข้าร้าน
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">อีเมล</label>
+              <Input value={invite.email} disabled />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">รหัสผ่าน</label>
+                <button
+                  type="button"
+                  onClick={() => navigate({ to: "/forgot-password" })}
+                  className="text-xs text-primary underline-offset-4 hover:underline"
+                >
+                  ลืมรหัสผ่าน?
+                </button>
+              </div>
+              <div className="relative">
+                <Input
+                  type={showPw ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  aria-label={showPw ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                >
+                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <Button type="submit" className="w-full" disabled={submitting}>
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> กำลังเข้าสู่ระบบ...
+                </>
+              ) : (
+                "เข้าสู่ระบบและเข้าร้าน"
+              )}
+            </Button>
+          </form>
         )}
 
         {view === "form" && invite && (
