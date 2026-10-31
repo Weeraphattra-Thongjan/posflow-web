@@ -1,6 +1,8 @@
+import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
+import { useStore } from "@/lib/store-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,21 +22,28 @@ import {
 import { toast } from "sonner";
 import { UserPlus, Copy, Check, Mail, Trash2 } from "lucide-react";
 
+export const Route = createFileRoute("/_app/staff")({
+  component: StaffPage,
+});
+
+type StaffRole = "owner" | "cashier";
+
 interface StaffInvite {
   id: string;
   email: string;
-  role: "owner" | "cashier";
+  role: StaffRole;
   status: "pending" | "accepted";
   created_at: string;
 }
 
-export default function StaffPage() {
-  const { user, store } = useAuth();
+function StaffPage() {
+  const { user } = useAuth();
+  const { store } = useStore();
   const [invites, setInvites] = useState<StaffInvite[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{ email: string; role: StaffRole }>({
     email: "",
     role: "cashier",
   });
@@ -51,13 +60,22 @@ export default function StaffPage() {
     if (error) {
       toast.error("ไม่สามารถโหลดข้อมูลพนักงานได้: " + error.message);
     } else {
-      setInvites(data || []);
+      setInvites((data as StaffInvite[]) || []);
     }
   };
 
   useEffect(() => {
     loadInvites();
-  }, [store]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store?.id]);
+
+  // สร้างลิงก์คำเชิญ
+  const buildInviteUrl = (email: string) => {
+    if (!store) return "";
+    return `${window.location.origin}/accept-invite?store_id=${store.id}&email=${encodeURIComponent(
+      email
+    )}`;
+  };
 
   // ฟังก์ชันเพิ่ม/เชิญพนักงาน
   const handleSave = async () => {
@@ -68,7 +86,7 @@ export default function StaffPage() {
 
     setLoading(true);
     const email = form.email.trim().toLowerCase();
-    const acceptUrl = `${window.location.origin}/accept-invite?store_id=${store.id}&role=${form.role}`;
+    const inviteUrl = buildInviteUrl(email);
 
     try {
       // 1. บันทึกข้อมูลคำเชิญลงในตาราง staff_invites (ใช้ upsert)
@@ -76,7 +94,7 @@ export default function StaffPage() {
         {
           store_id: store.id,
           email,
-          role: form.role as "cashier" | "owner",
+          role: form.role,
           invited_by: user.id,
           status: "pending",
         },
@@ -89,33 +107,31 @@ export default function StaffPage() {
       const { error: authError } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: acceptUrl,
+          emailRedirectTo: inviteUrl,
         },
       });
 
-      // 3. คัดลอกลิงก์คำเชิญสำรองเก็บไว้ใน Clipboard ให้ผู้ใช้ทันที
-      const copyInviteUrl = `${window.location.origin}/accept-invite?store_id=${store.id}&email=${encodeURIComponent(
-        email
-      )}`;
-      await navigator.clipboard.writeText(copyInviteUrl);
+      // 3. คัดลอกลิงก์คำเชิญสำรองเก็บไว้ใน Clipboard
+      try {
+        await navigator.clipboard.writeText(inviteUrl);
+      } catch {
+        // บางเบราว์เซอร์ไม่อนุญาตให้คัดลอก ข้ามได้ ผู้ใช้กดก๊อปจากรายการได้ภายหลัง
+      }
 
       if (authError) {
-        // หากส่งอีเมลไม่สำเร็จ (ติดข้อจำกัด Resend / Rate Limit)
         toast.success(
           "บันทึกข้อมูลเรียบร้อย! คัดลอกลิงก์คำเชิญให้แล้ว นำไปส่งทาง LINE ให้พนักงานได้เลย",
           { duration: 6000 }
         );
       } else {
-        toast.success(
-          "ส่งอีเมลเชิญเรียบร้อย และคัดลอกลิงก์คำเชิญลง Clipboard แล้ว!"
-        );
+        toast.success("ส่งอีเมลเชิญเรียบร้อย และคัดลอกลิงก์คำเชิญลง Clipboard แล้ว!");
       }
 
       setOpen(false);
       setForm({ email: "", role: "cashier" });
       loadInvites();
     } catch (err: any) {
-      toast.error("เกิดข้อผิดพลาด: " + (err.message || "ไม่สามารถเพิ่มพนักงานได้"));
+      toast.error("เกิดข้อผิดพลาด: " + (err?.message || "ไม่สามารถเพิ่มพนักงานได้"));
     } finally {
       setLoading(false);
     }
@@ -123,24 +139,23 @@ export default function StaffPage() {
 
   // ฟังก์ชันกดก๊อปปี้ลิงก์เชิญจากรายการ
   const handleCopyLink = async (inviteEmail: string, inviteId: string) => {
-    if (!store) return;
-    const inviteUrl = `${window.location.origin}/accept-invite?store_id=${store.id}&email=${encodeURIComponent(
-      inviteEmail
-    )}`;
-    await navigator.clipboard.writeText(inviteUrl);
-    setCopiedId(inviteId);
-    toast.success("คัดลอกลิงก์คำเชิญเรียบร้อยแล้ว");
-    setTimeout(() => setCopiedId(null), 2000);
+    const inviteUrl = buildInviteUrl(inviteEmail);
+    if (!inviteUrl) return;
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopiedId(inviteId);
+      toast.success("คัดลอกลิงก์คำเชิญเรียบร้อยแล้ว");
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      toast.error("คัดลอกไม่สำเร็จ ลองใหม่อีกครั้ง");
+    }
   };
 
   // ฟังก์ชันลบคำเชิญ
   const handleDeleteInvite = async (id: string) => {
     if (!confirm("คุณต้องการลบคำเชิญนี้ใช่หรือไม่?")) return;
 
-    const { error } = await supabase
-      .from("staff_invites")
-      .delete()
-      .eq("id", id);
+    const { error } = await supabase.from("staff_invites").delete().eq("id", id);
 
     if (error) {
       toast.error("ไม่สามารถลบคำเชิญได้: " + error.message);
@@ -155,7 +170,7 @@ export default function StaffPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold">พนักงาน</h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             จัดการพนักงานและคำเชิญเข้าใช้งานร้านค้า
           </p>
         </div>
@@ -179,9 +194,7 @@ export default function StaffPage() {
                   type="email"
                   placeholder="name@example.com"
                   value={form.email}
-                  onChange={(e) =>
-                    setForm({ ...form, email: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
                 />
               </div>
 
@@ -189,7 +202,7 @@ export default function StaffPage() {
                 <label className="text-sm font-medium">บทบาท</label>
                 <Select
                   value={form.role}
-                  onValueChange={(val) => setForm({ ...form, role: val })}
+                  onValueChange={(val) => setForm({ ...form, role: val as StaffRole })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -202,11 +215,7 @@ export default function StaffPage() {
               </div>
 
               <div className="flex justify-end gap-2 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setOpen(false)}
-                  disabled={loading}
-                >
+                <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
                   ยกเลิก
                 </Button>
                 <Button onClick={handleSave} disabled={loading}>
@@ -219,16 +228,16 @@ export default function StaffPage() {
       </div>
 
       {/* รายการพนักงาน/คำเชิญ */}
-      <div className="bg-white rounded-xl border divide-y">
+      <div className="bg-card rounded-xl border divide-y">
         {invites.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
+          <div className="p-8 text-center text-muted-foreground">
             ยังไม่มีรายการพนักงาน กดปุ่ม "เพิ่มพนักงาน" เพื่อส่งคำเชิญ
           </div>
         ) : (
           invites.map((item) => (
             <div
               key={item.id}
-              className="p-4 flex items-center justify-between hover:bg-gray-50 transition"
+              className="p-4 flex items-center justify-between hover:bg-muted/50 transition"
             >
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-blue-50 text-blue-600 rounded-full">
@@ -236,10 +245,8 @@ export default function StaffPage() {
                 </div>
                 <div>
                   <p className="font-medium">{item.email}</p>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <span className="capitalize">
-                      {item.role === "owner" ? "เจ้าของร้าน" : "พนักงานขาย"}
-                    </span>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{item.role === "owner" ? "เจ้าของร้าน" : "พนักงานขาย"}</span>
                     <span>•</span>
                     <span
                       className={`px-2 py-0.5 rounded-full text-[10px] ${
@@ -248,9 +255,7 @@ export default function StaffPage() {
                           : "bg-yellow-100 text-yellow-700"
                       }`}
                     >
-                      {item.status === "accepted"
-                        ? "ตอบรับแล้ว"
-                        : "รอยืนยัน"}
+                      {item.status === "accepted" ? "ตอบรับแล้ว" : "รอยืนยัน"}
                     </span>
                   </div>
                 </div>
