@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
-import { Store as StoreIcon, ShieldAlert, ShieldCheck, UserPlus, Trash2, Loader2, MessageSquare, CheckCircle2 } from "lucide-react";
+import { Store as StoreIcon, ShieldAlert, ShieldCheck, UserPlus, Trash2, Loader2, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -18,7 +18,6 @@ export const Route = createFileRoute("/_app/admin")({
 interface StoreRow { id: string; name: string; slug: string; status: string; created_at: string; owner_id: string; }
 interface StoreLow { store_id: string; store_name: string; items: { id: string; name: string; stock: number; threshold: number }[]; }
 interface AdminRow { user_id: string; email: string; is_super: boolean; created_at: string; }
-interface Ticket { id: string; subject: string; message: string; status: "open" | "in_progress" | "closed"; user_email: string | null; admin_note: string | null; created_at: string; store_id: string | null; }
 
 function AdminPage() {
   const { user, loading } = useAuth();
@@ -28,7 +27,7 @@ function AdminPage() {
   const [isSuper, setIsSuper] = useState(false);
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [lowStock, setLowStock] = useState<StoreLow[]>([]);
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [openTickets, setOpenTickets] = useState(0);
   const [admins, setAdmins] = useState<AdminRow[]>([]);
   const [newEmail, setNewEmail] = useState("");
   const [adding, setAdding] = useState(false);
@@ -39,12 +38,13 @@ function AdminPage() {
     if (data) setAdmins(data as AdminRow[]);
   };
 
+  // นับเรื่องแจ้งปัญหาที่ยังไม่ปิด (จัดการเต็มรูปแบบที่หน้า /admin/tickets)
   const loadTickets = async () => {
-    const { data } = await supabase
+    const { count } = await supabase
       .from("support_tickets")
-      .select("id, subject, message, status, user_email, admin_note, created_at, store_id")
-      .order("created_at", { ascending: false });
-    setTickets((data ?? []) as Ticket[]);
+      .select("id", { count: "exact", head: true })
+      .neq("status", "closed");
+    setOpenTickets(count ?? 0);
   };
 
   useEffect(() => {
@@ -107,19 +107,6 @@ function AdminPage() {
     loadAdmins();
   };
 
-  const updateTicket = async (id: string, status: Ticket["status"]) => {
-    const { error } = await supabase.from("support_tickets").update({ status }).eq("id", id);
-    if (error) { toast.error(error.message); return; }
-    toast.success(t("admin.ticket_updated"));
-    loadTickets();
-  };
-
-  const deleteTicket = async (id: string) => {
-    const { error } = await supabase.from("support_tickets").delete().eq("id", id);
-    if (error) { toast.error(error.message); return; }
-    loadTickets();
-  };
-
   if (isAdmin === null) {
     return <div className="container mx-auto px-4 py-10 text-sm text-muted-foreground">{t("common.loading")}</div>;
   }
@@ -136,12 +123,6 @@ function AdminPage() {
   void lowStock;
 
   const locale = lang === "th" ? "th-TH" : "en-US";
-  const statusLabel: Record<Ticket["status"], string> = { open: t("admin.status.open"), in_progress: t("admin.status.in_progress"), closed: t("admin.status.closed") };
-  const statusTone: Record<Ticket["status"], string> = {
-    open: "bg-destructive/10 text-destructive",
-    in_progress: "bg-amber-500/10 text-amber-600",
-    closed: "bg-emerald-500/10 text-emerald-600",
-  };
   const storeStatusLabel = (status: string) => {
     const key = `admin.store_status.${status}`;
     const label = t(key);
@@ -150,6 +131,7 @@ function AdminPage() {
 
   const cards: { label: string; value: number; icon: typeof StoreIcon; tone: string; onClick?: () => void; hint?: string }[] = [
     { label: t("admin.all_stores"), value: stores.length, icon: StoreIcon, tone: "bg-primary/10 text-primary", onClick: () => setStoresOpen(true), hint: t("admin.view_store_list") },
+    { label: "เรื่องแจ้งปัญหาที่ยังไม่ปิด", value: openTickets, icon: MessageSquare, tone: openTickets ? "bg-destructive/10 text-destructive" : "bg-emerald-500/10 text-emerald-600", onClick: () => navigate({ to: "/admin/tickets" as any }), hint: "ไปหน้าเรื่องแจ้งปัญหา" },
   ];
 
 
@@ -181,51 +163,6 @@ function AdminPage() {
         ))}
       </div>
 
-
-      <div className="mt-8 rounded-2xl border border-border bg-card p-6">
-        <div className="mb-4 flex items-center gap-2">
-          <MessageSquare className="h-5 w-5 text-primary" />
-          <h2 className="font-display text-lg font-semibold tracking-tight">{t("admin.support_tickets")}</h2>
-          <Badge variant="secondary" className="ml-2">{t("admin.ticket_count", { n: tickets.length })}</Badge>
-        </div>
-        {tickets.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border bg-background py-10 text-center text-sm text-muted-foreground">
-            {t("admin.no_tickets")}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {tickets.map((tk) => (
-              <div key={tk.id} className="rounded-xl border border-border bg-background p-4">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusTone[tk.status]}`}>{statusLabel[tk.status]}</span>
-                      <h3 className="truncate font-semibold">{tk.subject}</h3>
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {t("admin.from")} {tk.user_email ?? t("admin.not_specified")} · {new Date(tk.created_at).toLocaleString(locale)}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    {tk.status !== "in_progress" && tk.status !== "closed" && (
-                      <Button size="sm" variant="outline" onClick={() => updateTicket(tk.id, "in_progress")}>{t("admin.mark_in_progress")}</Button>
-                    )}
-                    {tk.status !== "closed" && (
-                      <Button size="sm" variant="outline" className="gap-1" onClick={() => updateTicket(tk.id, "closed")}>
-                        <CheckCircle2 className="h-3.5 w-3.5" /> {t("admin.close_ticket")}
-                      </Button>
-                    )}
-                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteTicket(tk.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <p className="mt-3 whitespace-pre-wrap text-sm text-foreground/90">{tk.message}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       {isSuper && (
         <div className="mt-8 rounded-2xl border border-border bg-card p-6">

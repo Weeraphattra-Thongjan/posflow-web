@@ -4,6 +4,7 @@ import { Loader2, Languages } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { SupportTicketDialog } from "@/components/SupportTicketDialog";
+import { NotificationBell } from "@/components/NotificationBell";
 import { StoreProvider, useStore } from "@/lib/store-context";
 import { MenuPrefsProvider } from "@/lib/menu-prefs";
 import { useAuth } from "@/lib/auth";
@@ -85,6 +86,8 @@ function Shell() {
           <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-border bg-background/80 px-4 backdrop-blur-xl">
             <SidebarTrigger />
             <div className="flex items-center gap-2">
+              {/* กระดิ่งแจ้งเตือน: ผู้ใช้ได้รับเมื่อแอดมินอัปเดตเรื่องแจ้งปัญหา */}
+              <NotificationBell />
               <SupportTicketDialog />
               <button
                 onClick={() => setLang(lang === "th" ? "en" : "th")}

@@ -2,7 +2,7 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   LayoutGrid, Monitor, Package, Tag, Receipt, BarChart3, Users, LogOut, ShieldAlert,
-  ChevronsUpDown, History,
+  ChevronsUpDown, History, MessageSquare,
 } from "lucide-react";
 import { StorePicker } from "@/components/StorePicker";
 import {
@@ -31,6 +31,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const path = useRouterState({ select: (r) => r.location.pathname });
   const [isAdmin, setIsAdmin] = useState(false);
+  const [openTickets, setOpenTickets] = useState(0);
   const { hidden, customItems } = useMenuPrefs();
 
   useEffect(() => {
@@ -55,8 +56,24 @@ export function AppSidebar() {
 
   const onAdminPage = path.startsWith("/admin");
   const adminItem = { key: "admin" as const, to: "/admin", icon: ShieldAlert, label: t("side.admin") };
-  const items = onAdminPage && isAdmin
-    ? [adminItem]
+  // เมนูฝั่งแอดมิน: ภาพรวมร้านค้า + เรื่องแจ้งปัญหา (แยกหน้า)
+  const adminItems = [
+    { ...adminItem, label: "ภาพรวมร้านค้า" },
+    { key: "admin_tickets" as const, to: "/admin/tickets", icon: MessageSquare, label: "เรื่องแจ้งปัญหา", badge: openTickets },
+  ];
+
+  // นับเรื่องแจ้งปัญหาที่ยังไม่ปิด (แสดงเป็นตัวเลขบนเมนู)
+  useEffect(() => {
+    if (!isAdmin || !onAdminPage) return;
+    supabase
+      .from("support_tickets")
+      .select("id", { count: "exact", head: true })
+      .neq("status", "closed")
+      .then(({ count }) => setOpenTickets(count ?? 0));
+  }, [isAdmin, onAdminPage, path]);
+
+  const items: { key: string; to: string; icon: typeof LayoutGrid; label: string; badge?: number }[] = onAdminPage && isAdmin
+    ? adminItems
     : [
         ...roleItems.filter((i) => !hidden.has(i.key)),
         ...(isAdmin ? [adminItem] : []),
@@ -121,13 +138,20 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => {
-                const active = path === item.to || (item.to !== "/dashboard" && path.startsWith(item.to));
+                // /dashboard และ /admin ต้องตรงทุกตัว (กัน /admin ติด active ตอนอยู่ /admin/tickets)
+                const exact = item.to === "/dashboard" || (item.to === "/admin" && onAdminPage);
+                const active = exact ? path === item.to : path === item.to || path.startsWith(item.to + "/");
                 return (
                   <SidebarMenuItem key={item.to}>
                     <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
                       <Link to={item.to} className="flex items-center gap-3">
                         <item.icon className="h-4 w-4" />
-                        {!collapsed && <span>{item.label}</span>}
+                        {!collapsed && <span className="flex-1">{item.label}</span>}
+                        {!collapsed && !!item.badge && (
+                          <span className="rounded-full bg-destructive px-1.5 text-xs font-semibold text-destructive-foreground">
+                            {item.badge}
+                          </span>
+                        )}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
