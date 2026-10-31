@@ -9,15 +9,18 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useI18n } from "@/lib/i18n";
-import { useStore } from "@/lib/store-context";
+import { useStore, ACTIVE_STORE_KEY } from "@/lib/store-context";
 import { useAuth } from "@/lib/auth";
 import { useMenuPrefs, type MenuKey } from "@/lib/menu-prefs";
 import { getCustomIcon } from "@/lib/custom-icons";
 import { supabase } from "@/integrations/supabase/client";
 
+// เมนูที่พนักงานขาย (Cashier) เห็นได้ — แก้ตรงนี้ที่เดียว
+const CASHIER_MENUS: MenuKey[] = ["pos", "sales"];
+
 export function AppSidebar() {
   const { t } = useI18n();
-  const { store } = useStore();
+  const { store, role, loading: storeLoading } = useStore();
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { state } = useSidebar();
@@ -25,6 +28,7 @@ export function AppSidebar() {
   const path = useRouterState({ select: (r) => r.location.pathname });
   const [isAdmin, setIsAdmin] = useState(false);
   const { hidden, customItems } = useMenuPrefs();
+  const isCashier = role === "cashier";
 
   useEffect(() => {
     if (!user) return;
@@ -32,7 +36,6 @@ export function AppSidebar() {
       .then(({ data }) => setIsAdmin(!!data));
   }, [user]);
 
-  // ตั้งค่า Route ทั้งหมดให้อยู่ระดับ Root ตามโครงสร้าง App จริง
   const allItems: { key: MenuKey; to: string; icon: typeof LayoutGrid; label: string }[] = [
     { key: "dashboard", to: "/dashboard", icon: LayoutGrid, label: t("side.overview") },
     { key: "pos", to: "/pos", icon: Monitor, label: t("side.pos") },
@@ -42,19 +45,39 @@ export function AppSidebar() {
     { key: "reports", to: "/reports", icon: BarChart3, label: t("side.reports") },
     { key: "staff", to: "/staff", icon: Users, label: t("side.staff") },
   ];
-  
+
+  // กรองเมนูตามบทบาท
+  const roleItems = isCashier
+    ? allItems.filter((i) => CASHIER_MENUS.includes(i.key))
+    : allItems;
+
+  // กันพนักงานพิมพ์ URL เข้าหน้าที่ไม่มีสิทธิ์ → ส่งกลับไปหน้าขาย
+  // (เป็นแค่ฝั่ง UI ข้อมูลจริงต้องกันด้วย RLS ใน Supabase)
+  useEffect(() => {
+    if (storeLoading || !isCashier) return;
+    const allowed = roleItems.some((i) => path === i.to || path.startsWith(i.to + "/"));
+    if (!allowed) navigate({ to: "/pos", replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, isCashier, storeLoading]);
+
   const onAdminPage = path.startsWith("/admin");
   const adminItem = { key: "admin" as const, to: "/admin", icon: ShieldAlert, label: t("side.admin") };
   const items = onAdminPage && isAdmin
     ? [adminItem]
     : [
-        ...allItems.filter((i) => !hidden.has(i.key)),
+        ...roleItems.filter((i) => !hidden.has(i.key)),
         ...(isAdmin ? [adminItem] : []),
       ];
 
   const initial = store?.name?.[0]?.toUpperCase() ?? "S";
+  const roleLabel = isCashier ? "พนักงานขาย" : t("side.owner");
 
   const handleSignOut = async () => {
+    try {
+      localStorage.removeItem(ACTIVE_STORE_KEY);
+    } catch {
+      /* ไม่เป็นไร */
+    }
     await signOut();
     navigate({ to: "/" });
   };
@@ -69,7 +92,7 @@ export function AppSidebar() {
           {!collapsed && (
             <div className="min-w-0 flex-1">
               <p className="truncate font-display text-sm font-semibold">{store?.name ?? "—"}</p>
-              <p className="truncate text-xs text-muted-foreground">{t("side.owner")}</p>
+              <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>
             </div>
           )}
         </div>
@@ -97,7 +120,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {!onAdminPage && customItems.length > 0 && (
+        {!onAdminPage && !isCashier && customItems.length > 0 && (
           <SidebarGroup>
             {!collapsed && <SidebarGroupLabel>{t("side.store_menu")}</SidebarGroupLabel>}
             <SidebarGroupContent>
