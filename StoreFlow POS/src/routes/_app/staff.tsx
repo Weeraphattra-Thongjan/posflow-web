@@ -37,9 +37,21 @@ interface StaffInvite {
   created_at: string;
 }
 
+// โดเมนหลักของเว็บ — ลิงก์เชิญจะชี้มาที่นี่เสมอ ไม่ว่าเจ้าของร้านจะเปิดจากโดเมนไหน
+// (กันลิงก์ไปโผล่โดเมน preview ที่ Vercel ล็อกไว้)
+// ตั้งค่าได้ใน .env / Vercel: VITE_PUBLIC_SITE_URL=https://posflow-web-nine.vercel.app
+const SITE_URL = (
+  (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined) ||
+  "https://posflow-web-nine.vercel.app"
+).replace(/\/+$/, "");
+
 // ลิงก์เชิญใช้ token สุ่ม (เดาไม่ได้) ไม่ต้องพึ่งอีเมลจาก Supabase
-const buildInviteUrl = (token: string) =>
-  `${window.location.origin}/accept-invite?token=${token}`;
+const buildInviteUrl = (token: string) => {
+  // ตอนพัฒนาบนเครื่อง (localhost) ใช้โดเมนเครื่องตัวเองเพื่อทดสอบได้
+  const isLocal = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+  const base = isLocal ? window.location.origin : SITE_URL;
+  return `${base}/accept-invite?token=${token}`;
+};
 
 async function copyText(text: string) {
   try {
