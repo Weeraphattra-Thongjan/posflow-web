@@ -16,7 +16,7 @@ import { getCustomIcon } from "@/lib/custom-icons";
 import { supabase } from "@/integrations/supabase/client";
 
 // เมนูที่พนักงานขาย (Cashier) เห็นได้ — แก้ตรงนี้ที่เดียว
-const CASHIER_MENUS: MenuKey[] = ["pos", "sales"];
+const CASHIER_MENUS: MenuKey[] = ["dashboard", "pos", "promotions", "sales"];
 
 export function AppSidebar() {
   const { t } = useI18n();

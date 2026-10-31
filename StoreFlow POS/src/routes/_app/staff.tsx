@@ -159,16 +159,23 @@ function StaffPage() {
     }
   };
 
-  // ลบคำเชิญ
-  const handleDeleteInvite = async (id: string) => {
-    if (!confirm("คุณต้องการลบคำเชิญนี้ใช่หรือไม่?")) return;
+  // ลบพนักงาน: ลบคำเชิญ + ถอดสิทธิ์เข้าร้าน (ทำในฐานข้อมูลผ่าน remove_staff)
+  const handleDeleteInvite = async (invite: StaffInvite) => {
+    const accepted = invite.status === "accepted";
+    const msg = accepted
+      ? `ลบ ${invite.email} ออกจากร้าน?\nพนักงานคนนี้จะเข้าร้านไม่ได้อีก`
+      : `ยกเลิกคำเชิญของ ${invite.email}?\nลิงก์ที่ส่งไปจะใช้ไม่ได้`;
+    if (!confirm(msg)) return;
 
-    const { error } = await supabase.from("staff_invites").delete().eq("id", id);
+    // rpc ใหม่ยังไม่มีใน type ที่ generate ไว้
+    const { error } = await (supabase.rpc as any)("remove_staff", {
+      p_invite_id: invite.id,
+    });
 
     if (error) {
-      toast.error("ไม่สามารถลบคำเชิญได้: " + error.message);
+      toast.error("ไม่สามารถลบได้: " + error.message);
     } else {
-      toast.success("ลบคำเชิญเรียบร้อยแล้ว");
+      toast.success(accepted ? "ลบพนักงานและถอดสิทธิ์เรียบร้อยแล้ว" : "ยกเลิกคำเชิญเรียบร้อยแล้ว");
       loadInvites();
     }
   };
@@ -299,7 +306,9 @@ function StaffPage() {
                   variant="ghost"
                   size="icon"
                   className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                  onClick={() => handleDeleteInvite(item.id)}
+                  onClick={() => handleDeleteInvite(item)}
+                  aria-label={item.status === "accepted" ? "ลบพนักงาน" : "ยกเลิกคำเชิญ"}
+                  title={item.status === "accepted" ? "ลบพนักงาน" : "ยกเลิกคำเชิญ"}
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
