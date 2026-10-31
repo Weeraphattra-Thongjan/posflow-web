@@ -33,7 +33,21 @@ interface StaffInvite {
   email: string;
   role: StaffRole;
   status: "pending" | "accepted";
+  token: string;
   created_at: string;
+}
+
+// ลิงก์เชิญใช้ token สุ่ม (เดาไม่ได้) ไม่ต้องพึ่งอีเมลจาก Supabase
+const buildInviteUrl = (token: string) =>
+  `${window.location.origin}/accept-invite?token=${token}`;
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function StaffPage() {
@@ -60,7 +74,7 @@ function StaffPage() {
     if (error) {
       toast.error("ไม่สามารถโหลดข้อมูลพนักงานได้: " + error.message);
     } else {
-      setInvites((data as StaffInvite[]) || []);
+      setInvites((data as unknown as StaffInvite[]) || []);
     }
   };
 
@@ -69,15 +83,7 @@ function StaffPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store?.id]);
 
-  // สร้างลิงก์คำเชิญ
-  const buildInviteUrl = (email: string) => {
-    if (!store) return "";
-    return `${window.location.origin}/accept-invite?store_id=${store.id}&email=${encodeURIComponent(
-      email
-    )}`;
-  };
-
-  // ฟังก์ชันเพิ่ม/เชิญพนักงาน
+  // เพิ่ม/เชิญพนักงาน → บันทึกคำเชิญ แล้วคัดลอกลิงก์ให้ส่งทาง LINE
   const handleSave = async () => {
     if (!store || !user || !form.email.trim()) {
       toast.error("กรุณากรอกอีเมลพนักงาน");
@@ -86,46 +92,35 @@ function StaffPage() {
 
     setLoading(true);
     const email = form.email.trim().toLowerCase();
-    const inviteUrl = buildInviteUrl(email);
 
     try {
-      // 1. บันทึกข้อมูลคำเชิญลงในตาราง staff_invites (ใช้ upsert)
-      const { error: dbError } = await supabase.from("staff_invites").upsert(
-        {
-          store_id: store.id,
-          email,
-          role: form.role,
-          invited_by: user.id,
-          status: "pending",
-        },
-        { onConflict: "store_id,email" }
+      const { data, error } = await supabase
+        .from("staff_invites")
+        .upsert(
+          {
+            store_id: store.id,
+            email,
+            role: form.role,
+            invited_by: user.id,
+            status: "pending",
+          } as any,
+          { onConflict: "store_id,email" }
+        )
+        .select("token")
+        .single();
+
+      if (error) throw error;
+
+      const token = (data as any)?.token as string | undefined;
+      if (!token) throw new Error("ไม่พบ token ของคำเชิญ (รัน SQL เพิ่มคอลัมน์ token แล้วหรือยัง?)");
+
+      const copied = await copyText(buildInviteUrl(token));
+      toast.success(
+        copied
+          ? "บันทึกแล้ว! คัดลอกลิงก์คำเชิญให้แล้ว ส่งให้พนักงานทาง LINE ได้เลย"
+          : "บันทึกแล้ว! กดปุ่ม \"ก๊อปปี้ลิงก์\" ในรายการเพื่อส่งให้พนักงาน",
+        { duration: 6000 }
       );
-
-      if (dbError) throw dbError;
-
-      // 2. พยายามส่ง Magic Link ผ่าน Supabase Auth
-      const { error: authError } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: inviteUrl,
-        },
-      });
-
-      // 3. คัดลอกลิงก์คำเชิญสำรองเก็บไว้ใน Clipboard
-      try {
-        await navigator.clipboard.writeText(inviteUrl);
-      } catch {
-        // บางเบราว์เซอร์ไม่อนุญาตให้คัดลอก ข้ามได้ ผู้ใช้กดก๊อปจากรายการได้ภายหลัง
-      }
-
-      if (authError) {
-        toast.success(
-          "บันทึกข้อมูลเรียบร้อย! คัดลอกลิงก์คำเชิญให้แล้ว นำไปส่งทาง LINE ให้พนักงานได้เลย",
-          { duration: 6000 }
-        );
-      } else {
-        toast.success("ส่งอีเมลเชิญเรียบร้อย และคัดลอกลิงก์คำเชิญลง Clipboard แล้ว!");
-      }
 
       setOpen(false);
       setForm({ email: "", role: "cashier" });
@@ -137,21 +132,22 @@ function StaffPage() {
     }
   };
 
-  // ฟังก์ชันกดก๊อปปี้ลิงก์เชิญจากรายการ
-  const handleCopyLink = async (inviteEmail: string, inviteId: string) => {
-    const inviteUrl = buildInviteUrl(inviteEmail);
-    if (!inviteUrl) return;
-    try {
-      await navigator.clipboard.writeText(inviteUrl);
-      setCopiedId(inviteId);
+  // ก๊อปปี้ลิงก์เชิญจากรายการ
+  const handleCopyLink = async (invite: StaffInvite) => {
+    if (!invite.token) {
+      toast.error("คำเชิญนี้ยังไม่มี token กรุณาลบแล้วเชิญใหม่");
+      return;
+    }
+    if (await copyText(buildInviteUrl(invite.token))) {
+      setCopiedId(invite.id);
       toast.success("คัดลอกลิงก์คำเชิญเรียบร้อยแล้ว");
       setTimeout(() => setCopiedId(null), 2000);
-    } catch {
+    } else {
       toast.error("คัดลอกไม่สำเร็จ ลองใหม่อีกครั้ง");
     }
   };
 
-  // ฟังก์ชันลบคำเชิญ
+  // ลบคำเชิญ
   const handleDeleteInvite = async (id: string) => {
     if (!confirm("คุณต้องการลบคำเชิญนี้ใช่หรือไม่?")) return;
 
@@ -214,12 +210,16 @@ function StaffPage() {
                 </Select>
               </div>
 
-              <div className="flex justify-end gap-2 pt-4">
+              <p className="text-xs text-muted-foreground">
+                ระบบจะคัดลอกลิงก์คำเชิญให้ ส่งให้พนักงานทาง LINE เพื่อให้ตั้งรหัสผ่านเอง
+              </p>
+
+              <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
                   ยกเลิก
                 </Button>
                 <Button onClick={handleSave} disabled={loading}>
-                  {loading ? "กำลังบันทึก..." : "บันทึก"}
+                  {loading ? "กำลังบันทึก..." : "บันทึกและคัดลอกลิงก์"}
                 </Button>
               </div>
             </div>
@@ -231,7 +231,7 @@ function StaffPage() {
       <div className="bg-card rounded-xl border divide-y">
         {invites.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
-            ยังไม่มีรายการพนักงาน กดปุ่ม "เพิ่มพนักงาน" เพื่อส่งคำเชิญ
+            ยังไม่มีรายการพนักงาน กดปุ่ม "เพิ่มพนักงาน" เพื่อสร้างคำเชิญ
           </div>
         ) : (
           invites.map((item) => (
@@ -262,24 +262,26 @@ function StaffPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1 text-xs"
-                  onClick={() => handleCopyLink(item.email, item.id)}
-                >
-                  {copiedId === item.id ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-green-600" />
-                      คัดลอกแล้ว
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      ก๊อปปี้ลิงก์
-                    </>
-                  )}
-                </Button>
+                {item.status !== "accepted" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1 text-xs"
+                    onClick={() => handleCopyLink(item)}
+                  >
+                    {copiedId === item.id ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-green-600" />
+                        คัดลอกแล้ว
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        ก๊อปปี้ลิงก์
+                      </>
+                    )}
+                  </Button>
+                )}
 
                 <Button
                   variant="ghost"
