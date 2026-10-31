@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { useStore } from "@/lib/store-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Store as StoreIcon, Eye, EyeOff } from "lucide-react";
@@ -31,7 +30,6 @@ function AcceptInvitePage() {
   const navigate = useNavigate();
   const { store_id } = Route.useSearch();
   const { session, loading: authLoading } = useAuth();
-  const { refresh } = useStore();
 
   const [view, setView] = useState<View>("loading");
   const [invalidMsg, setInvalidMsg] = useState("ลิงก์คำเชิญไม่ถูกต้องหรือหมดอายุ");
@@ -45,12 +43,21 @@ function AcceptInvitePage() {
   useEffect(() => {
     if (authLoading) return;
 
+    // ถ้า Supabase ส่ง error มาใน URL (#error=...) เช่น ลิงก์หมดอายุ/ถูกใช้ไปแล้ว
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const hashError = hash.get("error_code") || hash.get("error");
+    if (hashError) {
+      // ล้าง #error ออกจาก URL ให้สะอาด
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+
     if (!store_id) {
       setInvalidMsg("ลิงก์คำเชิญไม่ถูกต้อง");
       setView("invalid");
       return;
     }
 
+    // ถ้ายังมี session จากการคลิกครั้งก่อน ใช้ต่อได้เลยแม้ลิงก์จะหมดอายุแล้ว
     if (!session) {
       setView("no-session");
       return;
@@ -84,9 +91,9 @@ function AcceptInvitePage() {
       /* ไม่เป็นไร */
     }
 
-    await refresh();
     toast.success(`เข้าสู่ร้าน ${invite?.store_name ?? ""} สำเร็จ!`);
-    navigate({ to: "/pos" });
+    // โหลดหน้าใหม่ทั้งหน้า ให้ StoreProvider ดึงร้านที่เพิ่งเข้าร่วม
+    window.location.assign("/pos");
   };
 
   // 2. ตั้งรหัสผ่าน + ตอบรับคำเชิญ
