@@ -64,7 +64,9 @@ async function copyText(text: string) {
 
 function StaffPage() {
   const { user } = useAuth();
-  const { store } = useStore();
+  const { store, role: myRole } = useStore();
+  // พนักงานขายเชิญได้แค่ตำแหน่งพนักงานขาย และลบผู้มีตำแหน่งเจ้าของร้านไม่ได้ (ฐานข้อมูลตรวจซ้ำอีกชั้น)
+  const isOwner = myRole !== "cashier";
   const [invites, setInvites] = useState<StaffInvite[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -224,7 +226,7 @@ function StaffPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="cashier">พนักงานขาย (Cashier)</SelectItem>
-                    <SelectItem value="owner">เจ้าของร้าน (Owner)</SelectItem>
+                    {isOwner && <SelectItem value="owner">เจ้าของร้าน (Owner)</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
@@ -302,6 +304,7 @@ function StaffPage() {
                   </Button>
                 )}
 
+                {(isOwner || item.role !== "owner") && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -312,6 +315,7 @@ function StaffPage() {
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
+                )}
               </div>
             </div>
           ))
