@@ -2,7 +2,7 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   LayoutGrid, Monitor, Package, Tag, Receipt, BarChart3, Users, LogOut, ShieldAlert,
-  ChevronsUpDown, History, MessageSquare, Store as StoreIcon,
+  History, MessageSquare,
 } from "lucide-react";
 import { StorePicker } from "@/components/StorePicker";
 import {
@@ -23,11 +23,9 @@ import { supabase } from "@/integrations/supabase/client";
 export function AppSidebar() {
   const { t } = useI18n();
   const { store, role, stores, switchStore, needsSelection } = useStore();
-  const canSwitch = stores.length > 1;
-  const [pickerOpen, setPickerOpen] = useState(false);
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const { state, isMobile, setOpenMobile } = useSidebar();
+  const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const path = useRouterState({ select: (r) => r.location.pathname });
   const [isAdmin, setIsAdmin] = useState(false);
@@ -83,17 +81,10 @@ export function AppSidebar() {
   const roleText = (r: string | null) => (r === "cashier" ? "พนักงานขาย" : t("side.owner"));
   const roleLabel = roleText(role);
 
-  // เปิดหน้าต่างเปลี่ยนร้าน (บนมือถือปิดแถบเมนูก่อน ไม่ให้แถบเมนูบังหรือปิดหน้าต่างทิ้ง)
-  const openPicker = () => {
-    if (isMobile) setOpenMobile(false);
-    setPickerOpen(true);
-  };
-
-  // ยืนยันเลือกร้าน: บันทึกร้านที่เลือก แล้วโหลดหน้าใหม่ทั้งหมด
-  // เพื่อให้ทุกหน้า (สินค้า ยอดขาย รายงาน ฯลฯ) ดึงข้อมูลของร้านใหม่ ไม่ค้างข้อมูลร้านเดิม
+  // เลือกร้านได้เฉพาะหลังเข้าสู่ระบบเท่านั้น (ต้องการเปลี่ยนร้าน → ออกจากระบบแล้วเข้าใหม่)
+  // ยืนยันเลือกร้าน: บันทึกร้านที่เลือก แล้วโหลดหน้าใหม่ให้ทุกหน้าดึงข้อมูลของร้านนี้
   const handleChoose = (id: string) => {
     switchStore(id);
-    setPickerOpen(false);
     window.location.assign("/pos");
   };
 
@@ -108,7 +99,6 @@ export function AppSidebar() {
             <p className="truncate font-display text-sm font-semibold">{store?.name ?? "—"}</p>
             <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>
           </div>
-          {canSwitch && <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />}
         </>
       )}
     </div>
@@ -116,7 +106,6 @@ export function AppSidebar() {
 
   const handleSignOut = async () => {
     clearStoreChoice(); // ครั้งหน้าต้องเลือกร้านใหม่
-    setPickerOpen(false);
     await signOut();
     navigate({ to: "/" });
   };
@@ -125,19 +114,7 @@ export function AppSidebar() {
     <>
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
-        {canSwitch ? (
-          <button
-            type="button"
-            onClick={openPicker}
-            className="rounded-lg transition hover:bg-sidebar-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-            aria-label="เปลี่ยนร้านค้า"
-            title="เปลี่ยนร้านค้า"
-          >
-            {storeHeader}
-          </button>
-        ) : (
-          storeHeader
-        )}
+        {storeHeader}
       </SidebarHeader>
 
       <SidebarContent>
@@ -197,14 +174,6 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
-          {canSwitch && (
-            <SidebarMenuItem>
-              <SidebarMenuButton onClick={openPicker} tooltip="เปลี่ยนร้านค้า">
-                <StoreIcon className="h-4 w-4" />
-                {!collapsed && <span>เปลี่ยนร้านค้า</span>}
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          )}
           <SidebarMenuItem>
             <SidebarMenuButton onClick={handleSignOut} tooltip={t("side.signout")}>
               <LogOut className="h-4 w-4" />
@@ -215,16 +184,15 @@ export function AppSidebar() {
       </SidebarFooter>
     </Sidebar>
 
-      {/* วางหน้าต่างเลือกร้านไว้นอก <Sidebar> เพื่อให้เปิดได้ทั้งบนคอมและมือถือ
-          (บนมือถือแถบเมนูเป็น Sheet ที่ถูกถอดออกเมื่อปิด ถ้าวางไว้ข้างในหน้าต่างจะหายไปด้วย)
-          หลังเข้าสู่ระบบ: บังคับเลือกร้านก่อน (ปิดไม่ได้) / ระหว่างใช้งาน: เปลี่ยนร้านพร้อมยืนยัน */}
+      {/* หน้าเลือกร้านแสดงเฉพาะหลังเข้าสู่ระบบ (บัญชีที่มีหลายร้าน) และปิดไม่ได้จนกว่าจะเลือก
+          วางไว้นอก <Sidebar> เพื่อให้แสดงได้ทั้งบนคอมและมือถือ */}
       <StorePicker
-        open={needsSelection || pickerOpen}
-        closable={!needsSelection}
+        open={needsSelection}
+        closable={false}
         stores={stores}
         currentStoreId={store?.id}
         onChoose={handleChoose}
-        onClose={() => setPickerOpen(false)}
+        onClose={() => {}}
         onSignOut={handleSignOut}
       />
     </>
