@@ -2,7 +2,7 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   LayoutGrid, Monitor, Package, Tag, Receipt, BarChart3, Users, LogOut, ShieldAlert,
-  ChevronsUpDown, History, MessageSquare,
+  ChevronsUpDown, History, MessageSquare, Store as StoreIcon,
 } from "lucide-react";
 import { StorePicker } from "@/components/StorePicker";
 import {
@@ -27,7 +27,7 @@ export function AppSidebar() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const { state } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
   const path = useRouterState({ select: (r) => r.location.pathname });
   const [isAdmin, setIsAdmin] = useState(false);
@@ -83,11 +83,18 @@ export function AppSidebar() {
   const roleText = (r: string | null) => (r === "cashier" ? "พนักงานขาย" : t("side.owner"));
   const roleLabel = roleText(role);
 
-  // ยืนยันเลือกร้านจากหน้าจอเลือกร้าน
+  // เปิดหน้าต่างเปลี่ยนร้าน (บนมือถือปิดแถบเมนูก่อน ไม่ให้แถบเมนูบังหรือปิดหน้าต่างทิ้ง)
+  const openPicker = () => {
+    if (isMobile) setOpenMobile(false);
+    setPickerOpen(true);
+  };
+
+  // ยืนยันเลือกร้าน: บันทึกร้านที่เลือก แล้วโหลดหน้าใหม่ทั้งหมด
+  // เพื่อให้ทุกหน้า (สินค้า ยอดขาย รายงาน ฯลฯ) ดึงข้อมูลของร้านใหม่ ไม่ค้างข้อมูลร้านเดิม
   const handleChoose = (id: string) => {
     switchStore(id);
     setPickerOpen(false);
-    navigate({ to: "/pos" });
+    window.location.assign("/pos");
   };
 
   const storeHeader = (
@@ -115,12 +122,13 @@ export function AppSidebar() {
   };
 
   return (
+    <>
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
         {canSwitch ? (
           <button
             type="button"
-            onClick={() => setPickerOpen(true)}
+            onClick={openPicker}
             className="rounded-lg transition hover:bg-sidebar-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
             aria-label="เปลี่ยนร้านค้า"
             title="เปลี่ยนร้านค้า"
@@ -189,6 +197,14 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
+          {canSwitch && (
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={openPicker} tooltip="เปลี่ยนร้านค้า">
+                <StoreIcon className="h-4 w-4" />
+                {!collapsed && <span>เปลี่ยนร้านค้า</span>}
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
           <SidebarMenuItem>
             <SidebarMenuButton onClick={handleSignOut} tooltip={t("side.signout")}>
               <LogOut className="h-4 w-4" />
@@ -197,8 +213,11 @@ export function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+    </Sidebar>
 
-      {/* หลังเข้าสู่ระบบ: บังคับเลือกร้านก่อน (ปิดไม่ได้) / ระหว่างใช้งาน: เปลี่ยนร้านพร้อมยืนยัน */}
+      {/* วางหน้าต่างเลือกร้านไว้นอก <Sidebar> เพื่อให้เปิดได้ทั้งบนคอมและมือถือ
+          (บนมือถือแถบเมนูเป็น Sheet ที่ถูกถอดออกเมื่อปิด ถ้าวางไว้ข้างในหน้าต่างจะหายไปด้วย)
+          หลังเข้าสู่ระบบ: บังคับเลือกร้านก่อน (ปิดไม่ได้) / ระหว่างใช้งาน: เปลี่ยนร้านพร้อมยืนยัน */}
       <StorePicker
         open={needsSelection || pickerOpen}
         closable={!needsSelection}
@@ -208,6 +227,6 @@ export function AppSidebar() {
         onClose={() => setPickerOpen(false)}
         onSignOut={handleSignOut}
       />
-    </Sidebar>
+    </>
   );
 }
