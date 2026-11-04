@@ -20,6 +20,29 @@ export const Route = createFileRoute("/_app/pos")({
 
 interface Product { id: string; name: string; price: number; stock: number; sku: string | null; barcode: string | null; }
 interface CartItem extends Product { qty: number; }
+interface AppliedPromo {
+  id: string; code: string; name: string;
+  discount_type: string; discount_value: number; min_purchase: number;
+  starts_at: string | null; ends_at: string | null;
+}
+
+// แปลงแถวจากตาราง promotions เป็นข้อมูลที่หน้า POS ใช้
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toPromo(d: any): AppliedPromo {
+  return {
+    id: d.id, code: d.code ?? "", name: d.name ?? "",
+    discount_type: String(d.discount_type), discount_value: Number(d.discount_value),
+    min_purchase: Number(d.min_purchase ?? 0), starts_at: d.starts_at ?? null, ends_at: d.ends_at ?? null,
+  };
+}
+
+// ตรวจช่วงวันที่ของโปรโมชัน: คืนข้อความแจ้งเตือนถ้าใช้ไม่ได้ / null ถ้าใช้ได้
+function promoDateError(p: { starts_at: string | null; ends_at: string | null }): string | null {
+  const now = Date.now();
+  if (p.starts_at && now < new Date(p.starts_at).getTime()) return "โปรโมชันนี้ยังไม่ถึงวันเริ่มใช้งาน";
+  if (p.ends_at && now > new Date(p.ends_at).getTime()) return "โปรโมชันนี้หมดอายุแล้ว";
+  return null;
+}
 type PayMethod = "cash" | "qr" | "card" | "transfer";
 type Tab = "all" | "top" | "recent";
 
@@ -47,8 +70,9 @@ function PosPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [pay, setPay] = useState<PayMethod>("cash");
   const [promoCode, setPromoCode] = useState("");
-  const [discount, setDiscount] = useState(0);
-  const [appliedPromoId, setAppliedPromoId] = useState<string | null>(null);
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
+  const [promos, setPromos] = useState<AppliedPromo[]>([]);       // โปรโมชันที่ใช้ได้ของร้าน
+  const [promoListOpen, setPromoListOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<LastReceipt | null>(null);
   const [barcode, setBarcode] = useState("");
@@ -68,14 +92,19 @@ function PosPage() {
 
   const load = async () => {
     if (!store) return;
-    const [prodRes, topRes, recentRes] = await Promise.all([
+    const [prodRes, topRes, recentRes, promoRes] = await Promise.all([
       supabase.from("products").select("id, name, price, stock, sku, barcode")
         .eq("store_id", store.id).eq("is_active", true).order("name"),
       supabase.from("sale_items").select("product_id, quantity")
         .eq("store_id", store.id).limit(500),
       supabase.from("sale_items").select("product_id, created_at")
         .eq("store_id", store.id).order("created_at", { ascending: false }).limit(50),
+      supabase.from("promotions")
+        .select("id, code, name, discount_type, discount_value, min_purchase, starts_at, ends_at")
+        .eq("store_id", store.id).eq("is_active", true).order("name"),
     ]);
+    // เก็บเฉพาะโปรที่อยู่ในช่วงวันใช้งาน ไว้ให้กดเลือกโดยไม่ต้องจำโค้ด
+    setPromos((promoRes.data ?? []).map(toPromo).filter((p) => !promoDateError(p)));
     setProducts((prodRes.data ?? []).map((p) => ({ ...p, price: Number(p.price) })));
 
     // Compute top sellers
@@ -111,23 +140,59 @@ function PosPage() {
   const remove = (id: string) => setCart((c) => c.filter((x) => x.id !== id));
 
   const subtotal = useMemo(() => cart.reduce((a, x) => a + x.price * x.qty, 0), [cart]);
+
+  // คำนวณส่วนลดใหม่ทุกครั้งที่ตะกร้าเปลี่ยน (ไม่ล็อกค่าไว้ตอนกดใช้โค้ด)
+  const discount = useMemo(() => {
+    if (!appliedPromo || subtotal < appliedPromo.min_purchase) return 0;
+    const raw = appliedPromo.discount_type === "percent"
+      ? subtotal * appliedPromo.discount_value / 100
+      : appliedPromo.discount_value;
+    // ส่วนลดต้องไม่เกินยอดรวม และปัดเป็นทศนิยม 2 ตำแหน่ง
+    return Math.round(Math.min(raw, subtotal) * 100) / 100;
+  }, [appliedPromo, subtotal]);
   const total = Math.max(0, subtotal - discount);
+  const appliedPromoId = appliedPromo?.id ?? null;
+
+  const clearPromo = () => { setAppliedPromo(null); setPromoCode(""); };
+
+  // ถ้าลดสินค้าออกจนยอดต่ำกว่าขั้นต่ำ ให้ยกเลิกโปรโมชันอัตโนมัติ
+  useEffect(() => {
+    if (appliedPromo && cart.length > 0 && subtotal < appliedPromo.min_purchase) {
+      toast.warning(`ยอดซื้อต่ำกว่าขั้นต่ำ ${thb(appliedPromo.min_purchase)} ยกเลิกโปรโมชัน ${appliedPromo.code} แล้ว`);
+      setAppliedPromo(null);
+    }
+    if (appliedPromo && cart.length === 0) setAppliedPromo(null);
+  }, [subtotal, cart.length, appliedPromo]);
+
+  // ตรวจเงื่อนไขแล้วใช้โปรโมชัน (ใช้ร่วมกันทั้งการพิมพ์โค้ดและการกดเลือกจากรายการ)
+  const selectPromo = (promo: AppliedPromo) => {
+    if (cart.length === 0) return toast.error("กรุณาเพิ่มสินค้าลงตะกร้าก่อนใช้โค้ดส่วนลด");
+    const dateErr = promoDateError(promo);
+    if (dateErr) { setAppliedPromo(null); return toast.error(dateErr); }
+    if (subtotal < promo.min_purchase) {
+      setAppliedPromo(null);
+      return toast.error(`ต้องซื้อขั้นต่ำ ${thb(promo.min_purchase)} จึงใช้โปรโมชันนี้ได้`);
+    }
+    setAppliedPromo(promo); setPromoListOpen(false);
+    toast.success(`ใช้โปรโมชัน ${promo.name} แล้ว`);
+  };
 
   const applyPromo = async () => {
     if (!store || !promoCode.trim()) return;
+    if (cart.length === 0) return toast.error("กรุณาเพิ่มสินค้าลงตะกร้าก่อนใช้โค้ดส่วนลด");
     const { data } = await supabase.from("promotions").select("*")
       .eq("store_id", store.id).eq("code", promoCode.trim().toUpperCase()).eq("is_active", true).maybeSingle();
-    if (!data) { setDiscount(0); setAppliedPromoId(null); return toast.error(t("pos.invalid_promo")); }
-    if (subtotal < Number(data.min_purchase)) { return toast.error(`Min ${thb(Number(data.min_purchase))}`); }
-    const d = data.discount_type === "percent"
-      ? subtotal * Number(data.discount_value) / 100
-      : Number(data.discount_value);
-    setDiscount(d); setAppliedPromoId(data.id);
-    toast.success(`-${thb(d)}`);
+    if (!data) { setAppliedPromo(null); return toast.error(t("pos.invalid_promo")); }
+    selectPromo(toPromo(data));
   };
 
   const checkout = async () => {
     if (!store || !user || cart.length === 0 || busy) return;
+    // ตรวจวันหมดอายุซ้ำตอนชำระเงิน (กรณีใส่โค้ดไว้นานจนเลยเวลาหมดอายุ)
+    if (appliedPromo) {
+      const dateErr = promoDateError(appliedPromo);
+      if (dateErr) { setAppliedPromo(null); return toast.error(`${dateErr} กรุณาตรวจสอบยอดอีกครั้ง`); }
+    }
     setBusy(true);
     const snapshot = cart.map((x) => ({ name: x.name, qty: x.qty, price: x.price, line: x.price * x.qty }));
     const { data: sale, error } = await supabase.from("sales").insert({
@@ -149,7 +214,7 @@ function PosPage() {
       store_name: store.name, items: snapshot, subtotal, discount, total, payment_method: pay,
     });
     toast.success(t("pos.success", { n: String(sale.receipt_no).padStart(4, "0") }));
-    setCart([]); setDiscount(0); setPromoCode(""); setAppliedPromoId(null);
+    setCart([]); clearPromo();
     load(); setBusy(false);
   };
 
@@ -162,13 +227,13 @@ function PosPage() {
       else if (e.key === "F3") { e.preventDefault(); barcodeRef.current?.focus(); }
       else if (e.key === "Escape") {
         if (inField) (e.target as HTMLElement).blur();
-        else { setCart([]); setDiscount(0); setPromoCode(""); setAppliedPromoId(null); }
+        else { setCart([]); clearPromo(); }
       } else if (e.key === "F2") { e.preventDefault(); checkout(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line
-  }, [cart, busy, store, user, subtotal, discount, total, pay, appliedPromoId]);
+  }, [cart, busy, store, user, subtotal, discount, total, pay, appliedPromo]);
 
   const baseList = useMemo(() => {
     if (tab === "top") {
@@ -317,10 +382,67 @@ function PosPage() {
         </div>
 
         <div className="border-t border-border bg-card p-4">
-          <div className="mb-3 flex gap-2">
-            <Input value={promoCode} onChange={(e) => setPromoCode(e.target.value)} placeholder={t("pos.promo_code")} />
-            <Button variant="outline" onClick={applyPromo}>{t("pos.apply")}</Button>
-          </div>
+          {appliedPromo ? (
+            <div className="mb-3 flex items-center justify-between rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-sm">
+              <div className="min-w-0">
+                <div className="truncate font-medium">{appliedPromo.name}{appliedPromo.code && ` (${appliedPromo.code})`}</div>
+                <div className="text-xs text-muted-foreground">
+                  {appliedPromo.discount_type === "percent"
+                    ? `ลด ${appliedPromo.discount_value}%`
+                    : `ลด ${thb(appliedPromo.discount_value)}`}
+                  {appliedPromo.min_purchase > 0 && ` · ขั้นต่ำ ${thb(appliedPromo.min_purchase)}`}
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" onClick={clearPromo}>ยกเลิก</Button>
+            </div>
+          ) : (
+            <div className="mb-3 flex gap-2">
+              <Input
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") applyPromo(); }}
+                placeholder={t("pos.promo_code")}
+              />
+              <Button variant="outline" onClick={applyPromo}>{t("pos.apply")}</Button>
+              <Button
+                variant={promoListOpen ? "default" : "outline"}
+                onClick={() => setPromoListOpen((o) => !o)}
+                disabled={promos.length === 0}
+                title={promos.length === 0 ? "ร้านยังไม่มีโปรโมชันที่ใช้ได้" : "เลือกโปรโมชันจากรายการ"}
+              >
+                เลือกโค้ด
+              </Button>
+            </div>
+          )}
+
+          {/* รายการโปรโมชันให้กดเลือก ไม่ต้องจำโค้ด */}
+          {!appliedPromo && promoListOpen && (
+            <div className="mb-3 max-h-56 space-y-1.5 overflow-y-auto rounded-lg border border-border p-2">
+              {promos.map((p) => {
+                const short = p.min_purchase - subtotal;
+                const ok = cart.length > 0 && short <= 0;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => selectPromo(p)}
+                    disabled={!ok}
+                    className="flex w-full items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-left text-sm transition-smooth hover:border-primary/60 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{p.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {p.code ? `${p.code} · ` : ""}{p.discount_type === "percent" ? `ลด ${p.discount_value}%` : `ลด ${thb(p.discount_value)}`}
+                        {p.ends_at && ` · ถึง ${new Date(p.ends_at).toLocaleDateString("th-TH")}`}
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-xs">
+                      {cart.length === 0 ? "ตะกร้าว่าง" : ok ? "ใช้" : `ขาดอีก ${thb(short)}`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           <div className="mb-3 grid grid-cols-4 gap-1.5">
             {methods.map((m) => (
